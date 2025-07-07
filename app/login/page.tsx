@@ -14,17 +14,10 @@ export default function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold text-pink-600">DayToCourse</CardTitle>
-          <CardDescription>소셜 로그인으로 간편하게 시작하세요</CardDescription>
+          <CardDescription>사용자 맞춤형 데이트코스 추천 서비스</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="w-full h-48 bg-gray-100 rounded-lg flex items-center justify-center mb-6">
-            <span className="text-gray-500">로그인 이미지</span>
-          </div>
-
-          <Button
-            className="w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900"
-            onClick={handleKakaoLogin}
-          >
+          <Button className="w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900" onClick={handleKakaoLogin}>
             카카오 소셜 로그인
           </Button>
         </CardContent>
