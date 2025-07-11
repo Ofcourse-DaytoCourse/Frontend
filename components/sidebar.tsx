@@ -7,7 +7,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Menu, X, Plus, MessageCircle, User, List, Share2, Home, ChevronDown, ChevronUp } from "lucide-react"
+import { Menu, X, Plus, MessageCircle, User, List, Share2, Home, ChevronDown, ChevronUp, Trash2 } from "lucide-react"
 import { UserStorage, clearAuthStorage, TokenStorage } from "@/lib/storage"
 
 interface ChatSession {
@@ -57,7 +57,7 @@ export function GlobalMenu({ children }: GlobalMenuProps) {
     try {
       const token = TokenStorage.get();
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/chat/sessions/user/${userInfo.user_id}?limit=10`,
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/chat/sessions/user/${userInfo.user_id}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -94,6 +94,38 @@ export function GlobalMenu({ children }: GlobalMenuProps) {
   const handleChatClick = (sessionId: string) => {
     setIsOpen(false);
     window.location.href = `/course?session=${sessionId}`;
+  };
+
+  // 채팅 세션 삭제
+  const handleDeleteChat = async (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // 부모 클릭 이벤트 방지
+    
+    if (!confirm("정말로 이 채팅을 삭제하시겠습니까?")) {
+      return;
+    }
+
+    try {
+      const token = TokenStorage.get();
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/chat/sessions/${sessionId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        // 목록에서 해당 세션 제거
+        setChatHistory(prev => prev.filter(chat => chat.session_id !== sessionId));
+      } else {
+        alert('채팅 삭제에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('채팅 삭제 실패:', error);
+      alert('채팅 삭제 중 오류가 발생했습니다.');
+    }
   };
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/")
@@ -185,7 +217,7 @@ export function GlobalMenu({ children }: GlobalMenuProps) {
                 {chatHistory.map((chat) => (
                   <div
                     key={chat.session_id}
-                    className="p-3 rounded-lg hover:bg-gray-50 cursor-pointer border border-gray-100 transition-colors"
+                    className="p-3 rounded-lg hover:bg-gray-50 cursor-pointer border border-gray-100 transition-colors relative group"
                     onClick={() => handleChatClick(chat.session_id)}
                   >
                     <div className="flex items-center gap-2 mb-1">
@@ -194,6 +226,14 @@ export function GlobalMenu({ children }: GlobalMenuProps) {
                       {chat.has_course && (
                         <div className="w-2 h-2 bg-green-500 rounded-full" title="코스 완성됨"></div>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity p-1 h-auto hover:bg-red-100"
+                        onClick={(e) => handleDeleteChat(chat.session_id, e)}
+                      >
+                        <Trash2 className="h-3 w-3 text-red-500" />
+                      </Button>
                     </div>
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-gray-500 truncate">{chat.preview_message}</p>

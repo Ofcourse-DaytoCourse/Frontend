@@ -83,15 +83,69 @@ export default function SharedCoursePage() {
           <CardContent>
             <p className="text-gray-700 mb-6">{course.description}</p>
             
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">코스 상세 정보</h3>
-              {course.places?.map((place: any, idx: number) => (
-                <div key={idx} className="p-4 border rounded-lg bg-gray-50">
-                  <h4 className="font-semibold">{idx + 1}. {place.name}</h4>
-                  <p className="text-sm text-gray-500 mt-1">{place.address}</p>
-                  <p className="text-sm text-gray-600">카테고리: {place.category_name}</p>
-                </div>
-              ))}
+            <div className="bg-gray-50 p-6 rounded-lg">
+              <h3 className="font-semibold mb-4">코스 상세 정보</h3>
+              <div className="space-y-6">
+                {course.places?.map((place: any, index: number) => (
+                  <div key={index} className="bg-white p-5 rounded-lg shadow-sm border">
+                    <div className="flex items-start gap-4">
+                      <span className="bg-pink-500 text-white px-3 py-1 rounded-full text-sm font-medium">
+                        {index + 1}
+                      </span>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-3">
+                          <h4 className="text-lg font-bold text-gray-900">{place.name}</h4>
+                          <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs">
+                            {place.category || '기타'}
+                          </span>
+                        </div>
+                        
+                        <p className="text-gray-600 text-sm mb-3 flex items-center">
+                          📍 {place.address}
+                        </p>
+                        
+                        {place.summary && (
+                          <div className="bg-blue-50 p-3 rounded-lg mb-3">
+                            <p className="text-sm text-gray-700 leading-relaxed">
+                              💡 <strong>장소 소개:</strong> {place.summary}
+                            </p>
+                          </div>
+                        )}
+                        
+                        {place.description && place.description.trim() && (
+                          <div className="bg-green-50 p-3 rounded-lg mb-3">
+                            <p className="text-sm text-gray-700 leading-relaxed">
+                              📝 <strong>상세 정보:</strong> {place.description}
+                            </p>
+                          </div>
+                        )}
+                        
+                        <div className="flex gap-3 mt-3">
+                          {place.kakao_url && (
+                            <a 
+                              href={place.kakao_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 px-3 py-1 rounded text-xs font-medium transition-colors"
+                            >
+                              🗺️ 카카오맵에서 보기
+                            </a>
+                          )}
+                          
+                          {place.phone && (
+                            <a 
+                              href={`tel:${place.phone}`}
+                              className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs font-medium transition-colors"
+                            >
+                              📞 {place.phone}
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </CardContent>
         </Card>

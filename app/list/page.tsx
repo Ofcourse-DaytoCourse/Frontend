@@ -18,6 +18,8 @@ interface Course {
   is_shared_with_couple: boolean;
   places: number[];
   creator_nickname: string;
+  is_my_course: boolean;
+  is_shared_course: boolean;
 }
 
 export default function ListPage() {
@@ -73,17 +75,27 @@ export default function ListPage() {
       <div className="max-w-4xl mx-auto p-6">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">저장된 코스</h1>
-          <p className="text-gray-600">내가 저장한 데이트 코스 목록입니다</p>
+          <p className="text-gray-600">내가 저장한 코스와 공유받은 코스 목록입니다</p>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {courses.map((course) => (
-            <Card key={course.course_id} className="hover:shadow-lg transition-shadow">
+            <Card key={course.course_id} className={`hover:shadow-lg transition-shadow ${
+              course.is_shared_course ? 'border-blue-200 bg-blue-50' : ''
+            }`}>
               <CardHeader>
-                <CardTitle className="text-lg">{course.title}</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">{course.title}</CardTitle>
+                  {course.is_shared_course && (
+                    <span className="bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-medium">
+                      💕 공유받음
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <Calendar className="h-4 w-4" />
                   {course.created_at?.split("T")[0]}
+                  <span className="ml-2 text-gray-400">• {course.creator_nickname}</span>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -100,15 +112,20 @@ export default function ListPage() {
 
                 <div className="flex items-center justify-between">
                   <Button asChild className="flex-1 mr-2 bg-transparent" variant="outline">
-                    <Link href={`/list/${course.course_id}`}>상세보기</Link>
+                    <Link href={course.is_shared_course ? `/shared/${course.course_id}` : `/list/${course.course_id}`}>상세보기</Link>
                   </Button>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600">공유</span>
-                    <Switch
-                      checked={course.is_shared_with_couple}
-                      onCheckedChange={() => handleShareToggle(course.course_id)}
-                    />
-                  </div>
+                  {course.is_my_course && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600">공유</span>
+                      <Switch
+                        checked={course.is_shared_with_couple}
+                        onCheckedChange={() => handleShareToggle(course.course_id)}
+                      />
+                    </div>
+                  )}
+                  {course.is_shared_course && (
+                    <span className="text-sm text-blue-600 font-medium">💝 상대방 코스</span>
+                  )}
                 </div>
               </CardContent>
             </Card>

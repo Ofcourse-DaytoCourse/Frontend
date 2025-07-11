@@ -10,6 +10,7 @@ import { TokenStorage } from "@/lib/storage";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { getMyProfile } from "@/lib/api";
+import { ChatResponse, ChatSessionResponse } from "@/types/api";
 
 interface ChatMessage {
   message_id: number;
@@ -127,7 +128,7 @@ export default function CoursePage() {
     try {
       const token = TokenStorage.get();
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/chat/sessions/user/${user.user_id}?limit=10`,
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/chat/sessions/user/${user.user_id}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -265,9 +266,8 @@ export default function CoursePage() {
         setMessages(prev => [...prev, aiMessage]);
         setQuickReplies(data.response.quick_replies || []);
         
-        // 추천 준비 완료 확인
-        if (data.response.message.includes("추천을 시작하시려면") || 
-            data.response.message.includes("추천 시작")) {
+        // 메시지 키워드 기반으로 추천 가능 여부 판단
+        if (data.response.message.includes("추천을 시작하시려면")) {
           setCanRecommend(true);
         }
       } else {
@@ -365,7 +365,30 @@ export default function CoursePage() {
     }
 
     try {
+      const { convertCoordinatesToAddress } = await import('@/lib/kakao');
       const token = TokenStorage.get();
+      
+      // places 데이터 처리 (카카오 API로 주소 변환)
+      const processedPlaces = await Promise.all(
+        selectedCourse.places?.map(async (place: any, index: number) => {
+          let address = place.place_info?.address;
+          
+          // 주소가 없으면 카카오 API로 좌표를 주소로 변환
+          if (!address && place.place_info?.coordinates) {
+            address = await convertCoordinatesToAddress(place.place_info.coordinates);
+          }
+          
+          return {
+            sequence: index + 1,
+            place_id: place.place_info?.place_id,
+            name: place.place_info?.name || "장소명 없음",
+            category_name: place.place_info?.category || "카테고리 없음",
+            address: address || "위치 정보 없음",
+            coordinates: place.place_info?.coordinates || {},
+            description: place.description || ""
+          };
+        }) || []
+      );
       
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_BASE_URL}/courses/save`,
@@ -379,14 +402,9 @@ export default function CoursePage() {
             user_id: user.user_id,
             title: editableTitle,
             description: editableDescription || "AI가 추천한 맞춤형 데이트 코스입니다.",
-            places: selectedCourse.places?.map((place: any, index: number) => ({
-              sequence: index + 1,
-              name: place.place_info?.name || "장소명 없음",
-              category_name: place.place_info?.category || "카테고리 없음",
-              address: place.place_info?.address || "주소 정보 없음"
-            })) || [],
-            total_duration: 240, // 4시간 기본값
-            estimated_cost: 100000 // 10만원 기본값
+            places: processedPlaces,
+            total_duration: selectedCourse.total_duration || 240,
+            estimated_cost: selectedCourse.estimated_cost || 100000
           }),
         }
       );
@@ -407,6 +425,7 @@ export default function CoursePage() {
     if (!user || !courseData) return;
 
     try {
+      const { convertCoordinatesToAddress } = await import('@/lib/kakao');
       const token = TokenStorage.get();
       
       // 코스 데이터에서 첫 번째 맑은 날 코스 추출
@@ -417,6 +436,28 @@ export default function CoursePage() {
         alert('저장할 코스 데이터가 없습니다.');
         return;
       }
+
+      // places 데이터 처리 (카카오 API로 주소 변환)
+      const processedPlaces = await Promise.all(
+        firstCourse.places?.map(async (place: any, index: number) => {
+          let address = place.place_info?.address;
+          
+          // 주소가 없으면 카카오 API로 좌표를 주소로 변환
+          if (!address && place.place_info?.coordinates) {
+            address = await convertCoordinatesToAddress(place.place_info.coordinates);
+          }
+          
+          return {
+            sequence: index + 1,
+            place_id: place.place_info?.place_id,
+            name: place.place_info?.name || "장소명 없음",
+            category_name: place.place_info?.category || "카테고리 없음",
+            address: address || "위치 정보 없음",
+            coordinates: place.place_info?.coordinates || {},
+            description: place.description || ""
+          };
+        }) || []
+      );
 
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_BASE_URL}/courses/save`,
@@ -430,14 +471,9 @@ export default function CoursePage() {
             user_id: user.user_id,
             title: `AI 추천 데이트 코스`,
             description: firstCourse.recommendation_reason || "AI가 추천한 맞춤형 데이트 코스입니다.",
-            places: firstCourse.places?.map((place: any, index: number) => ({
-              sequence: index + 1,
-              name: place.place_info?.name || "장소명 없음",
-              category_name: place.place_info?.category || "카테고리 없음",
-              address: "주소 정보 없음"
-            })) || [],
-            total_duration: 240, // 4시간 기본값
-            estimated_cost: 100000 // 10만원 기본값
+            places: processedPlaces,
+            total_duration: firstCourse.total_duration || 240,
+            estimated_cost: firstCourse.estimated_cost || 100000
           }),
         }
       );
@@ -455,6 +491,7 @@ export default function CoursePage() {
   };
 
   const loadSession = async (sessionId: string) => {
+    console.log(`[DEBUG] 세션 로드 시작: ${sessionId}`);
     try {
       const token = TokenStorage.get();
       const response = await fetch(
@@ -466,20 +503,36 @@ export default function CoursePage() {
         }
       );
 
+      console.log(`[DEBUG] API 응답 상태: ${response.status}`);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log(`[DEBUG] 받은 데이터:`, data);
+        
         if (data.success) {
+          console.log(`[DEBUG] 메시지 개수: ${data.messages?.length || 0}`);
+          console.log(`[DEBUG] 메시지 내용:`, data.messages);
+          
           setCurrentSessionId(sessionId);
           setMessages(data.messages || []);
           setShowSessions(false);
           setQuickReplies([]);
           
-          // 마지막 메시지에 코스 데이터가 있는지 확인
+          // 추천 버튼 표시 여부 판단
           const lastMessage = data.messages[data.messages.length - 1];
+          
+          // 이미 코스 데이터가 있으면 추천 불가
           if (lastMessage?.course_data) {
             setCanRecommend(false);
           } else {
-            setCanRecommend(true);
+            // 세션 정보에서 can_recommend 필드 확인
+            if (data.session?.can_recommend !== undefined) {
+              console.log(`[DEBUG] 세션의 can_recommend 값: ${data.session.can_recommend}`);
+              setCanRecommend(data.session.can_recommend);
+            } else {
+              console.log(`[DEBUG] 세션에 can_recommend 정보가 없음`);
+              setCanRecommend(false);
+            }
           }
         }
       }
