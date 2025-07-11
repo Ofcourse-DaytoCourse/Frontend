@@ -1,4 +1,5 @@
 import type { User } from '@/types/api';
+const TOKEN_KEY = "token";
 
 // 로컬스토리지 키 상수 정의
 export const STORAGE_KEYS = {
@@ -9,43 +10,37 @@ export const STORAGE_KEYS = {
 
 // 토큰 관련 함수들
 export const TokenStorage = {
-  get: (): string | null => {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem(STORAGE_KEYS.TOKEN);
+  get: () => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem(TOKEN_KEY);
   },
-  
-  set: (token: string): void => {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(STORAGE_KEYS.TOKEN, token);
+  set: (token: string) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(TOKEN_KEY, token);
+    }
   },
-  
-  remove: (): void => {
-    if (typeof window === 'undefined') return;
-    localStorage.removeItem(STORAGE_KEYS.TOKEN);
-  }
+  remove: () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(TOKEN_KEY);
+    }
+  },
 };
 
 // 사용자 정보 관련 함수들
 export const UserStorage = {
-  get: (): User | null => {
-    if (typeof window === 'undefined') return null;
-    const userData = localStorage.getItem(STORAGE_KEYS.USER);
-    if (!userData) return null;
-    try {
-      return JSON.parse(userData) as User;
-    } catch {
-      return null;
-    }
+  get: () => {
+    if (typeof window === "undefined") return null;
+    const user = sessionStorage.getItem("user");
+    return user ? JSON.parse(user) : null;
   },
-  
-  set: (user: User): void => {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+  set: (user: any) => {
+    if (typeof window === "undefined") return;
+    sessionStorage.setItem("user", JSON.stringify(user));
   },
   
   remove: (): void => {
-    if (typeof window === 'undefined') return;
-    localStorage.removeItem(STORAGE_KEYS.USER);
+    if (typeof window === "undefined") return;
+    sessionStorage.removeItem("user");
   }
 };
 

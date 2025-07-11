@@ -35,6 +35,8 @@ export default function KakaoCallbackPage() {
 
         // 토큰과 사용자 정보 저장
         TokenStorage.set(response.accessToken);
+        console.log("Token saved:", response.accessToken);
+        console.log("TokenStorage.get:", TokenStorage.get());
         
         const userData = {
           user_id: response.user.user_id,
@@ -46,9 +48,9 @@ export default function KakaoCallbackPage() {
 
         // 신규 사용자면 회원가입 페이지로, 기존 사용자면 메인으로
         if (response.is_new_user) {
-          router.push("/signup");
+          setTimeout(() => router.push("/signup"), 100); // 100ms 딜레이
         } else {
-          router.push("/course");
+          setTimeout(() => router.push("/course"), 100);
         }
         
       } catch (err: any) {
