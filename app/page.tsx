@@ -10,12 +10,13 @@ export default function HomePage() {
 
   useEffect(() => {
     const token = TokenStorage.get();
-    const isDev = process.env.NODE_ENV === "development";
 
-    if (!token && !isDev) {
-      router.replace("/login");
+    if (token) {
+      router.replace("/course");
+    } else {
+      window.location.href = "/login";
     }
   }, []);
 
-  return <div className="p-6">홈페이지 (개발자 테스트 가능)</div>;
+  return <div className="p-6"></div>;
 }

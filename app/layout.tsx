@@ -11,7 +11,7 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "데이트 코스 추천",
   description: "AI가 추천하는 맞춤형 데이트 코스",
-    generator: 'v0.dev'
+    generator: 'Take a looks lab'
 }
 
 export default function RootLayout({
