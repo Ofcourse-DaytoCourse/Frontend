@@ -8,7 +8,8 @@ import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Menu, X, Plus, MessageCircle, User, List, Share2, Home, ChevronDown, ChevronUp, Trash2 } from "lucide-react"
-import { UserStorage, clearAuthStorage, TokenStorage } from "@/lib/storage"
+import { TokenStorage, clearAuthStorage } from "@/lib/storage"
+import { useAuth } from "@/contexts/auth-context"
 
 interface ChatSession {
   session_id: string;
@@ -28,6 +29,7 @@ interface GlobalMenuProps {
 export function GlobalMenu({ children }: GlobalMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isMenuExpanded, setIsMenuExpanded] = useState(false)
+  const { user } = useAuth();
   const [userInfo, setUserInfo] = useState({ name: "", nickname: "", user_id: "" })
   const [chatHistory, setChatHistory] = useState<ChatSession[]>([])
   const [isLoadingChats, setIsLoadingChats] = useState(false)
@@ -37,17 +39,16 @@ export function GlobalMenu({ children }: GlobalMenuProps) {
   const hideSidebarPages = ["/login", "/signup"]
   const shouldHideSidebar = hideSidebarPages.some((page) => pathname.startsWith(page))
 
-  // 사용자 정보 로드
+  // 사용자 정보 로드 (AuthContext에서)
   useEffect(() => {
-    const currentUser = UserStorage.get();
-    if (currentUser && currentUser.nickname) {
+    if (user && user.nickname) {
       setUserInfo({
-        name: currentUser.nickname,
-        nickname: currentUser.nickname,
-        user_id: currentUser.user_id || "",
+        name: user.nickname,
+        nickname: user.nickname,
+        user_id: user.user_id.toString() || "",
       });
     }
-  }, []);
+  }, [user]);
 
   // 채팅 기록 로드
   const loadChatHistory = async () => {
@@ -68,6 +69,11 @@ export function GlobalMenu({ children }: GlobalMenuProps) {
       if (response.ok) {
         const data = await response.json();
         setChatHistory(data.sessions || []);
+      } else {
+        // 401 Unauthorized 등의 에러 처리
+        if (response.status === 401) {
+          handleLogout();
+        }
       }
     } catch (error) {
       console.error('채팅 기록 로드 실패:', error);

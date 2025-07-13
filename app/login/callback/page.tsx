@@ -4,11 +4,12 @@
 import { useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { socialLogin } from "@/lib/api";
-import { TokenStorage, UserStorage } from "@/lib/storage";
+import { useAuth } from "@/contexts/auth-context";
 
 export default function KakaoCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { setAuthData } = useAuth();
   const code = searchParams.get("code");
   const hasProcessed = useRef(false);
 
@@ -32,25 +33,21 @@ export default function KakaoCallbackPage() {
           code,
         });
 
-
-        // 토큰과 사용자 정보 저장
-        TokenStorage.set(response.accessToken);
-        console.log("Token saved:", response.accessToken);
-        console.log("TokenStorage.get:", TokenStorage.get());
-        
         const userData = {
           user_id: response.user.user_id,
           nickname: response.user.nickname,
           email: "", // 백엔드에서 제공하지 않으므로 빈 값
         };
         
-        UserStorage.set(userData);
+        // 스토리지와 앱의 전역 상태를 함께 업데이트
+        setAuthData(response.accessToken, userData);
 
         // 신규 사용자면 회원가입 페이지로, 기존 사용자면 메인으로
+        // setTimeout을 사용해 React가 상태를 업데이트할 시간을 확보한 후 페이지 이동
         if (response.is_new_user) {
-          setTimeout(() => router.push("/signup"), 100); // 100ms 딜레이
+          setTimeout(() => router.push("/signup"), 0);
         } else {
-          setTimeout(() => router.push("/course"), 100);
+          setTimeout(() => router.push("/course"), 0);
         }
         
       } catch (err: any) {
@@ -63,7 +60,7 @@ export default function KakaoCallbackPage() {
     };
 
     handleKakaoLogin();
-  }, [code, router]);
+  }, [code, router, setAuthData]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">

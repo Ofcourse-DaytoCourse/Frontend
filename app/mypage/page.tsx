@@ -19,7 +19,7 @@ export default function MyPage() {
     joinDate: "",
   });
   const [partnerInfo, setPartnerInfo] = useState({
-    nickname: "연결된 연인이 없습니다",
+    nickname: "",
     status: "미연결",
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -47,16 +47,18 @@ export default function MyPage() {
 
         // 커플 정보 조회
         try {
-          const coupleData = await api(`/users/profile/couple-status?user_id=${currentUser.user_id}`, "GET", undefined, token);
-          if (coupleData.couple_info) {
+          const coupleData = await api(`/couples/status?user_id=${currentUser.user_id}`, "GET", undefined, token);
+          if (coupleData.has_partner && coupleData.couple_info) {
             setPartnerInfo({
               nickname: coupleData.couple_info.partner_nickname,
               status: "연결됨",
             });
+          } else {
+            setPartnerInfo({ nickname: "", status: "미연결" });
           }
         } catch (coupleError) {
-          // 커플 정보가 없는 경우 기본 상태 유지
           console.log("커플 정보 없음");
+          setPartnerInfo({ nickname: "", status: "미연결" });
         }
         
       } catch (error) {
@@ -142,11 +144,20 @@ export default function MyPage() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="font-medium">{partnerInfo.nickname}</p>
-                  <p className="text-sm text-green-600">{partnerInfo.status}</p>
-                </div>
-                <div className="h-3 w-3 bg-green-500 rounded-full"></div>
+                {partnerInfo.status === "연결됨" ? (
+                  <>
+                    <div>
+                      <p className="font-medium">{partnerInfo.nickname}</p>
+                      <p className="text-sm text-green-600">연결됨</p>
+                    </div>
+                    <div className="h-3 w-3 bg-green-500 rounded-full" />
+                  </>
+                ) : (
+                  <div>
+                    <p className="font-medium">미연결</p>
+                    <p className="text-sm text-gray-500">연인을 연결하고 코스를 공유해보세요.</p>
+                  </div>
+                )}
               </div>
               <Button asChild variant="outline" className="w-full bg-transparent">
                 <Link href="/mypage/couple">

@@ -4,23 +4,28 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { TokenStorage, UserStorage, clearAuthStorage } from "@/lib/storage";
+import { useAuth } from "@/contexts/auth-context";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { isLoading: isAuthLoading } = useAuth();
 
   const [authState, setAuthState] = useState<
     "loading" | "authenticated" | "unauthenticated"
   >("loading");
 
   useEffect(() => {
+    if (isAuthLoading) {
+      return;
+    }
     if (typeof window === "undefined") return;
 
     const token = TokenStorage.get();
     const user = UserStorage.get();
     const openPaths = ["/login", "/signup", "/login/callback"];
 
-    const isOpenPath = openPaths.includes(pathname);
+    const isOpenPath = openPaths.some(p => pathname.startsWith(p));
 
     // ✅ 공개 경로 처리
     if (isOpenPath) {
@@ -67,10 +72,10 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
 
     setAuthState("authenticated");
-  }, [pathname]);
+  }, [pathname, isAuthLoading, router]);
 
   // ✅ loading 상태
-  if (authState === "loading") {
+  if (authState === "loading" || isAuthLoading) {
     return <div className="p-6">인증 상태 확인 중...</div>;
   }
 
