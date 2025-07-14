@@ -6,7 +6,7 @@ export default function CourseLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="pt-16">
+    <div className="">
       {" "}
       {/* 햄버거 버튼 공간 확보 */}
       {children}

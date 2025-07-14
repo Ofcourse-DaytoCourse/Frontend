@@ -573,7 +573,7 @@ export default function CoursePage() {
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* 헤더 */}
-      <div className="p-6 border-b border-gray-200 bg-white shadow-sm">
+      <div className="p-6 pl-20 border-b border-gray-200 bg-white shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <MapPin className="h-8 w-8 text-pink-600" />

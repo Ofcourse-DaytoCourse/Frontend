@@ -90,7 +90,6 @@ export function GlobalMenu({ children }: GlobalMenuProps) {
   }, [isOpen, userInfo.user_id]);
 
   const menuItems = [
-    { href: "/course", label: "데이트 코스 추천", icon: Home },
     { href: "/list", label: "저장된 코스", icon: List },
     { href: "/shared", label: "공유된 코스", icon: Share2 },
     { href: "/mypage", label: "마이페이지", icon: User },
