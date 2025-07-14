@@ -4,11 +4,11 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { User, Edit, Heart, HelpCircle, LogOut, ChevronRight } from "lucide-react"
+import { User, Edit, Heart, HelpCircle, LogOut, ChevronRight, Trash2 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { UserStorage, TokenStorage, clearAuthStorage } from "@/lib/storage"
 import { useRouter } from "next/navigation"
-import { api } from "@/lib/api"
+import { api, deleteUser } from "@/lib/api"
 
 export default function MyPage() {
   const router = useRouter();
@@ -81,6 +81,38 @@ export default function MyPage() {
   const handleLogout = () => {
     clearAuthStorage();
     router.push("/login");
+  };
+
+  const handleDeleteUser = async () => {
+    if (!confirm("정말로 회원탈퇴를 하시겠습니까? 관련된 모든 정보가 삭제되며 복구할 수 없습니다.")) {
+      return;
+    }
+    
+    const currentUser = UserStorage.get();
+    const token = TokenStorage.get();
+
+    if (!currentUser || !token) {
+      alert("로그인 정보가 없습니다.");
+      router.push("/login");
+      return;
+    }
+
+    try {
+      await deleteUser(
+        {
+          user_id: currentUser.user_id,
+          nickname: userInfo.nickname,
+          email: userInfo.email,
+        },
+        token
+      );
+      alert("회원탈퇴가 완료되었습니다. 이용해주셔서 감사합니다.");
+      clearAuthStorage();
+      router.push("/login");
+    } catch (error: any) {
+      console.error("회원탈퇴 실패:", error);
+      alert("회원탈퇴 처리 중 오류가 발생했습니다: " + error.message);
+    }
   };
 
   if (isLoading) {
@@ -190,6 +222,17 @@ export default function MyPage() {
                   <div className="flex items-center gap-3">
                     <LogOut className="h-5 w-5" />
                     로그아웃
+                  </div>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="w-full justify-between h-14 px-6 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={handleDeleteUser}
+                >
+                  <div className="flex items-center gap-3">
+                    <Trash2 className="h-5 w-5" />
+                    회원탈퇴
                   </div>
                   <ChevronRight className="h-4 w-4" />
                 </Button>
