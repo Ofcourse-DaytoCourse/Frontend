@@ -111,3 +111,34 @@ export interface CommentCreateRequest {
   comment: string;
   timestamp: string;
 }
+
+// 채팅 관련 타입 정의
+export interface ChatResponse {
+  success: boolean;
+  message: string;
+  session_id?: string;
+  response?: {
+    message: string;
+    quick_replies?: string[];
+    can_recommend?: boolean;
+  };
+}
+
+export interface ChatMessage {
+  message_id: number;
+  message_type: "USER" | "ASSISTANT";
+  message_content: string;
+  sent_at: string;
+  course_data?: any;
+}
+
+export interface ChatSessionResponse {
+  success: boolean;
+  messages: ChatMessage[];
+  session: {
+    session_id: string;
+    session_title: string;
+    session_status: string;
+    can_recommend?: boolean;
+  };
+}
