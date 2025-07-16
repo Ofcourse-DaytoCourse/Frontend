@@ -6,6 +6,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Send, MapPin, MessageCircle, Save, Clock, Bot, User, Sparkles, List, UserCheck } from "lucide-react";
 import { TokenStorage } from "@/lib/storage";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -48,6 +50,12 @@ const RELATIONSHIP_STAGES = ["연인", "썸", "친구", "소개팅"];
 const ATMOSPHERES = ["로맨틱", "트렌디", "조용한", "활기찬", "고급스러운", "감성적", "편안한"];
 const BUDGETS = ["3만원", "5만원", "10만원", "15만원", "20만원 이상"];
 const TIME_SLOTS = ["오전", "오후", "저녁", "밤"];
+const MBTI_TYPES = [
+  'INTJ', 'INTP', 'ENTJ', 'ENTP',
+  'INFJ', 'INFP', 'ENFJ', 'ENFP', 
+  'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ',
+  'ISTP', 'ISFP', 'ESTP', 'ESFP'
+];
 
 export default function CoursePage() {
   const { user } = useAuth();
@@ -72,7 +80,7 @@ export default function CoursePage() {
   const [isCollectingInfo, setIsCollectingInfo] = useState(false);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [additionalInfo, setAdditionalInfo] = useState<AdditionalInfo>({
-    initial_message: "",
+    initial_message: "start",
     age: "",
     gender: "",
     mbti: "",
@@ -113,7 +121,7 @@ export default function CoursePage() {
     setMissingFields(missing);
 
     setAdditionalInfo({
-      initial_message: "",
+      initial_message: "start",
       age: profile?.profile_detail?.age_range || "",
       gender: profile?.profile_detail?.gender || "",
       mbti: profile?.profile_detail?.mbti || "",
@@ -187,7 +195,7 @@ export default function CoursePage() {
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({
             user_id: user.user_id,
-            initial_message: additionalInfo.initial_message,
+            initial_message: "start",
             user_profile: userProfilePayload,
           }),
         }
@@ -200,8 +208,7 @@ export default function CoursePage() {
       if (data.success) {
         setCurrentSessionId(data.session_id);
         const initialMessages: ChatMessage[] = [
-          { message_id: 1, message_type: "USER", message_content: additionalInfo.initial_message, sent_at: new Date().toISOString() },
-          { message_id: 2, message_type: "ASSISTANT", message_content: data.response.message, sent_at: new Date().toISOString() }
+          { message_id: Date.now(), message_type: "ASSISTANT", message_content: data.response.message, sent_at: new Date().toISOString() }
         ];
         setMessages(initialMessages);
         setQuickReplies(data.response.quick_replies || []);
@@ -222,7 +229,7 @@ export default function CoursePage() {
   const sendMessage = async () => {
     if (!input.trim() || !currentSessionId || !user) return;
 
-    const userMessage: ChatMessage = { message_id: messages.length + 1, message_type: "USER", message_content: input, sent_at: new Date().toISOString() };
+    const userMessage: ChatMessage = { message_id: Date.now(), message_type: "USER", message_content: input, sent_at: new Date().toISOString() };
     setMessages(prev => [...prev, userMessage]);
     const currentInput = input;
     setInput("");
@@ -241,7 +248,7 @@ export default function CoursePage() {
 
       const data = await response.json();
       if (data.success) {
-        const aiMessage: ChatMessage = { message_id: messages.length + 2, message_type: "ASSISTANT", message_content: data.response.message, sent_at: new Date().toISOString() };
+        const aiMessage: ChatMessage = { message_id: Date.now() + 1, message_type: "ASSISTANT", message_content: data.response.message, sent_at: new Date().toISOString() };
         setMessages(prev => [...prev, aiMessage]);
         setQuickReplies(data.response.quick_replies || []);
         if (data.response.message.includes("추천을 시작하시려면")) setCanRecommend(true);
@@ -250,7 +257,7 @@ export default function CoursePage() {
       }
     } catch (error) {
       console.error('메시지 전송 실패:', error);
-      const errorMessage: ChatMessage = { message_id: messages.length + 2, message_type: "ASSISTANT", message_content: "죄송합니다. 메시지 전송 중 오류가 발생했습니다.", sent_at: new Date().toISOString() };
+      const errorMessage: ChatMessage = { message_id: Date.now() + 2, message_type: "ASSISTANT", message_content: "죄송합니다. 메시지 전송 중 오류가 발생했습니다.", sent_at: new Date().toISOString() };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
@@ -342,43 +349,73 @@ export default function CoursePage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="initial_message">1. 어떤 데이트를 원하시나요?</Label>
-              <Textarea id="initial_message" value={additionalInfo.initial_message} onChange={(e) => handleAdditionalInfoChange('initial_message', e.target.value)} placeholder="예: 홍대에서 25살 여자친구랑 로맨틱한 저녁 데이트하고 싶어..." className="min-h-[80px]" />
-            </div>
-            {missingFields.map(field => (
-              <div key={field} className="space-y-2">
-                <Label htmlFor={field} className="capitalize">{field.toUpperCase()}</Label>
-                <Input id={field} value={additionalInfo[field as keyof AdditionalInfo]} onChange={(e) => handleAdditionalInfoChange(field as keyof AdditionalInfo, e.target.value)} placeholder={`${field.toUpperCase()} 정보를 입력해주세요`} />
+            {missingFields.includes('age') && (
+              <div className="space-y-2">
+                <Label htmlFor="age">나이</Label>
+                <Input id="age" value={additionalInfo.age} onChange={(e) => handleAdditionalInfoChange('age', e.target.value)} placeholder="나이를 입력해주세요" />
               </div>
-            ))}
+            )}
+            {missingFields.includes('gender') && (
+              <div className="space-y-2">
+                <Label>성별</Label>
+                <RadioGroup
+                  value={additionalInfo.gender}
+                  onValueChange={(value) => handleAdditionalInfoChange('gender', value)}
+                  className="flex gap-6"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="male" id="male" />
+                    <Label htmlFor="male">남성</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="female" id="female" />
+                    <Label htmlFor="female">여성</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+            )}
+            {missingFields.includes('mbti') && (
+              <div className="space-y-2">
+                <Label>MBTI</Label>
+                <Select onValueChange={(value) => handleAdditionalInfoChange('mbti', value)} value={additionalInfo.mbti}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="MBTI를 선택해주세요" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MBTI_TYPES.map(type => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
-              <Label>2. 누구와 함께하는 데이트인가요?</Label>
+              <Label>1. 누구와 함께하는 데이트인가요?</Label>
               <div className="flex flex-wrap gap-2 mt-2">
                 {RELATIONSHIP_STAGES.map(stage => <Button key={stage} variant={additionalInfo.relationship_stage === stage ? "default" : "outline"} onClick={() => handleAdditionalInfoChange('relationship_stage', stage)}>{stage}</Button>)}
               </div>
             </div>
             <div>
-              <Label>3. 원하는 분위기는 무엇인가요?</Label>
+              <Label>2. 원하는 분위기는 무엇인가요?</Label>
               <div className="flex flex-wrap gap-2 mt-2">
                 {ATMOSPHERES.map(item => <Button key={item} variant={additionalInfo.atmosphere === item ? "default" : "outline"} onClick={() => handleAdditionalInfoChange('atmosphere', item)}>{item}</Button>)}
               </div>
             </div>
             <div>
-              <Label>4. 예산은 어느 정도 생각하세요?</Label>
+              <Label>3. 예산은 어느 정도 생각하세요?</Label>
               <div className="flex flex-wrap gap-2 mt-2">
                 {BUDGETS.map(item => <Button key={item} variant={additionalInfo.budget === item ? "default" : "outline"} onClick={() => handleAdditionalInfoChange('budget', item)}>{item}</Button>)}
               </div>
             </div>
             <div>
-              <Label>5. 원하는 시간대는 언제인가요?</Label>
+              <Label>4. 원하는 시간대는 언제인가요?</Label>
               <div className="flex flex-wrap gap-2 mt-2">
                 {TIME_SLOTS.map(item => <Button key={item} variant={additionalInfo.time_slot === item ? "default" : "outline"} onClick={() => handleAdditionalInfoChange('time_slot', item)}>{item}</Button>)}
               </div>
             </div>
             <div className="pt-4 flex justify-end">
               <Button onClick={() => { setIsCollectingInfo(false); setMessages([]); }} variant="ghost">취소</Button>
-              <Button onClick={handleFullSubmit} disabled={isLoading || !additionalInfo.initial_message.trim()} className="bg-pink-600 hover:bg-pink-700">
+              <Button onClick={handleFullSubmit} disabled={isLoading} className="bg-pink-600 hover:bg-pink-700">
                 <UserCheck className="h-4 w-4 mr-2" />
                 {isLoading ? "요청 중..." : "AI 추천 요청"}
               </Button>
@@ -415,7 +452,36 @@ export default function CoursePage() {
       </div>
 
       {/* 세션 목록 */}
-      {showSessions && ( <div className="bg-white border-b border-gray-200 p-4">{/* ... */}</div> )}
+      {showSessions && (
+        <div className="bg-white border-b border-gray-200 p-4">
+          <h2 className="text-lg font-semibold mb-4 text-gray-800">채팅 기록</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {sessions.length > 0 ? (
+              sessions.map((session) => (
+                <Card
+                  key={session.session_id}
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => loadSession(session.session_id)}
+                >
+                  <CardHeader className="p-4">
+                    <CardTitle className="text-base truncate">{session.session_title || "제목 없음"}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0">
+                    <p className="text-sm text-muted-foreground truncate h-10">{session.preview_message}</p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {new Date(session.last_activity_at).toLocaleDateString()}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <div className="col-span-full text-center py-8">
+                <p className="text-gray-500">채팅 기록이 없습니다.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 메시지 영역 */}
       <div className="flex-1 p-6 overflow-auto">
