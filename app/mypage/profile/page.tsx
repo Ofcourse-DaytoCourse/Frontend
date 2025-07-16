@@ -22,6 +22,14 @@ const MBTI_TYPES = [
   'ISTP', 'ISFP', 'ESTP', 'ESFP'
 ];
 
+const age_TYPES = [
+  '19', '20', '21', '22',
+  '23', '24', '25', '26', 
+  '27', '28', '29', '30', '31', '32',
+  '33', '34', '35', '36', 
+  '37', '38', '39', '40', '41', '42'
+];
+
 
 export default function MyProfilePage() {
   const [user, setUser] = useState<any>(null);
@@ -193,13 +201,30 @@ export default function MyProfilePage() {
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="age_range">연령대</Label>
-              <Input
-                id="age_range"
-                value={form.profile_detail.age_range}
-                disabled={!editing}
-                onChange={(e) => handleChange("age_range", e.target.value)}
-              />
+              <Label>나이</Label>
+              {editing ? (
+                <Select
+                  value={form.profile_detail.age_range}
+                  onValueChange={(value) => handleChange("age_range", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="연령대를 선택해주세요" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {age_TYPES.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={form.profile_detail.age_range}
+                  disabled
+                  className="bg-gray-50"
+                />
+              )}
             </div>
             <div className="space-y-2">
               <Label>성별</Label>
