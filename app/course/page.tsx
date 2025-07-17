@@ -36,7 +36,7 @@ interface ChatSession {
 
 interface AdditionalInfo {
   initial_message: string;
-  age: string;
+  age: int;
   gender: string;
   mbti: string;
   relationship_stage: string;
