@@ -36,7 +36,7 @@ interface ChatSession {
 
 interface AdditionalInfo {
   initial_message: string;
-  age: int;
+  age: number;
   gender: string;
   mbti: string;
   relationship_stage: string;
@@ -81,7 +81,7 @@ export default function CoursePage() {
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [additionalInfo, setAdditionalInfo] = useState<AdditionalInfo>({
     initial_message: "start",
-    age: "",
+    age: 25,
     gender: "",
     mbti: "",
     relationship_stage: "",
@@ -122,7 +122,7 @@ export default function CoursePage() {
 
     setAdditionalInfo({
       initial_message: "start",
-      age: profile?.profile_detail?.age_range || "",
+      age: parseInt(profile?.profile_detail?.age_range) || 25,
       gender: profile?.profile_detail?.gender || "",
       mbti: profile?.profile_detail?.mbti || "",
       relationship_stage: "",
@@ -172,13 +172,13 @@ export default function CoursePage() {
     if (!user) return;
     setIsLoading(true);
     setMessages([]);
-    setCurrentSessionId(null);
+    // setCurrentSessionId(null);
     setQuickReplies([]);
     setCanRecommend(false);
 
     const userProfilePayload = {
       ...fullUserProfile?.profile_detail,
-      age: parseInt(additionalInfo.age, 10) || undefined,
+      age: additionalInfo.age || 25,
       gender: additionalInfo.gender,
       mbti: additionalInfo.mbti,
       relationship_stage: additionalInfo.relationship_stage,
@@ -207,6 +207,7 @@ export default function CoursePage() {
       const data = await response.json();
       
       if (data.success) {
+        console.log("✅ [SUCCESS] 세션 생성 성공, session_id:", data.session_id);
         setCurrentSessionId(data.session_id);
         const initialMessages: ChatMessage[] = [
           { message_id: Date.now(), message_type: "ASSISTANT", message_content: data.response.message, sent_at: new Date().toISOString() }
@@ -216,6 +217,7 @@ export default function CoursePage() {
         setIsCollectingInfo(false);
         await loadUserSessions();
       } else {
+        console.error("❌ [ERROR] 세션 생성 실패:", data.message);
         throw new Error(data.message || '세션 시작 실패');
       }
     } catch (error) {
@@ -266,7 +268,11 @@ export default function CoursePage() {
   };
 
   const startRecommendation = async () => {
-    if (!currentSessionId) return;
+    console.log("🔍 [DEBUG] startRecommendation 호출됨, currentSessionId:", currentSessionId);
+    if (!currentSessionId) {
+      console.error("❌ [ERROR] currentSessionId가 null입니다!");
+      return;
+    }
     setIsLoading(true);
     try {
       const token = TokenStorage.get();
@@ -296,7 +302,10 @@ export default function CoursePage() {
 
   // --- 핸들러 함수 ---
   const handleAdditionalInfoChange = (field: keyof AdditionalInfo, value: string) => {
-    setAdditionalInfo(prev => ({ ...prev, [field]: value }));
+    setAdditionalInfo(prev => ({ 
+      ...prev, 
+      [field]: field === 'age' ? parseInt(value) || 0 : value 
+    }));
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -492,7 +501,7 @@ export default function CoursePage() {
             {missingFields.includes('age') && (
               <div className="space-y-2">
                 <Label htmlFor="age">나이</Label>
-                <Input id="age" value={additionalInfo.age} onChange={(e) => handleAdditionalInfoChange('age', e.target.value)} placeholder="나이를 입력해주세요" />
+                <Input id="age" value={String(additionalInfo.age || "")} onChange={(e) => handleAdditionalInfoChange('age', e.target.value)} placeholder="나이를 입력해주세요" />
               </div>
             )}
             {missingFields.includes('gender') && (
@@ -815,8 +824,8 @@ export default function CoursePage() {
             disabled={isLoading || !currentSessionId}
           />
           <Button
-            onClick={sendMessage}
-            disabled={isLoading || !input.trim() || !currentSessionId}
+            onClick={currentSessionId ? sendMessage : handleFullSubmit}
+            disabled={isLoading || !input.trim()}
             className="bg-pink-600 hover:bg-pink-700 px-6"
           >
             <Send className="h-5 w-5" />
