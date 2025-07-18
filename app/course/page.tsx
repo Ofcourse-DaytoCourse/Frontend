@@ -883,6 +883,18 @@ export default function CoursePage() {
                                 <p className="text-sm text-gray-700">{place.description}</p>
                               </div>
                             )}
+                            {place.urls?.kakao_map && (
+                              <div className="mt-3">
+                                <a 
+                                  href={place.urls.kakao_map} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 px-3 py-1 rounded text-xs font-medium transition-colors"
+                                >
+                                  🗺️ 카카오맵에서 보기
+                                </a>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
