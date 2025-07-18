@@ -30,7 +30,7 @@ export function GlobalMenu({ children }: GlobalMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isMenuExpanded, setIsMenuExpanded] = useState(false)
   const { user } = useAuth();
-  const [userInfo, setUserInfo] = useState({ name: "", nickname: "", user_id: "" })
+  const [userInfo, setUserInfo] = useState({ nickname: "", user_id: "" })
   const [chatHistory, setChatHistory] = useState<ChatSession[]>([])
   const [isLoadingChats, setIsLoadingChats] = useState(false)
   const pathname = usePathname()
@@ -43,7 +43,6 @@ export function GlobalMenu({ children }: GlobalMenuProps) {
   useEffect(() => {
     if (user && user.nickname) {
       setUserInfo({
-        name: user.nickname,
         nickname: user.nickname,
         user_id: user.user_id.toString() || "",
       });
@@ -188,8 +187,7 @@ export function GlobalMenu({ children }: GlobalMenuProps) {
                 </AvatarFallback>
               </Avatar>
               <div>
-                <p className="font-medium">{userInfo.name}님</p>
-                <p className="text-sm text-gray-500">@{userInfo.nickname}</p>
+                <p className="font-medium">{userInfo.nickname}님</p>
               </div>
             </div>
           </div>
