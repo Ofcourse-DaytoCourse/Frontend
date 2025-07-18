@@ -229,13 +229,13 @@ export default function CoursePage() {
     }
   };
 
-  const sendMessage = async () => {
-    if (!input.trim() || !currentSessionId || !user) return;
+  const sendMessage = async (messageText?: string) => {
+    const textToSend = messageText || input.trim();
+    if (!textToSend || !currentSessionId || !user) return;
 
-    const userMessage: ChatMessage = { message_id: Date.now(), message_type: "USER", message_content: input, sent_at: new Date().toISOString() };
+    const userMessage: ChatMessage = { message_id: Date.now(), message_type: "USER", message_content: textToSend, sent_at: new Date().toISOString() };
     setMessages(prev => [...prev, userMessage]);
-    const currentInput = input;
-    setInput("");
+    if (!messageText) setInput("");
     setIsLoading(true);
     setQuickReplies([]);
 
@@ -244,7 +244,7 @@ export default function CoursePage() {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/chat/send-message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ session_id: currentSessionId, message: currentInput, user_id: user.user_id, user_profile: fullUserProfile?.profile_detail || {} }),
+        body: JSON.stringify({ session_id: currentSessionId, message: textToSend, user_id: user.user_id, user_profile: fullUserProfile?.profile_detail || {} }),
       });
 
       if (!response.ok) throw new Error('메시지 전송에 실패했습니다.');
@@ -254,7 +254,7 @@ export default function CoursePage() {
         const aiMessage: ChatMessage = { message_id: Date.now() + 1, message_type: "ASSISTANT", message_content: data.response.message, sent_at: new Date().toISOString() };
         setMessages(prev => [...prev, aiMessage]);
         setQuickReplies(data.response.quick_replies || []);
-        if (data.response.message.includes("추천을 시작하시려면")) setCanRecommend(true);
+        if (typeof data.response.message === 'string' && data.response.message.includes("추천을 시작하시려면")) setCanRecommend(true);
       } else {
         throw new Error(data.message || '메시지 전송 실패');
       }
@@ -329,6 +329,7 @@ export default function CoursePage() {
           setShowSessions(false);
           setQuickReplies([]);
           setIsCollectingInfo(false);
+          
           const lastMessage = data.messages[data.messages.length - 1];
           if (lastMessage?.course_data) setCanRecommend(false);
           else if (data.session?.can_recommend !== undefined) setCanRecommend(data.session.can_recommend);
@@ -575,6 +576,27 @@ export default function CoursePage() {
     </div>
   );
 
+  const ButtonMessage = ({ message, onButtonClick }) => {
+    if (!message || message.message_type !== 'buttons') return null;
+    
+    return (
+      <div className="bg-white p-4 rounded-lg shadow-sm border">
+        <p className="mb-3 text-gray-800 whitespace-pre-line">{message.question}</p>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+          {message.buttons?.map((button, index) => (
+            <button
+              key={index}
+              onClick={() => onButtonClick(button.value)}
+              className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded transition-colors text-sm font-medium"
+            >
+              {button.text}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* 헤더 */}
@@ -687,9 +709,25 @@ export default function CoursePage() {
                         )}
                       </div>
                       <div className="flex-1">
-                        <p className="whitespace-pre-line text-sm leading-relaxed">
-                          {message.message_content}
-                        </p>
+                        {message.message_type === "ASSISTANT" && typeof message.message_content === 'object' && message.message_content.message_type === 'buttons' ? (
+                          <ButtonMessage 
+                            message={message.message_content} 
+                            onButtonClick={(value) => {
+                              if (currentSessionId) {
+                                sendMessage(value);
+                              } else {
+                                setInput(value);
+                                setTimeout(() => {
+                                  handleFullSubmit();
+                                }, 100);
+                              }
+                            }} 
+                          />
+                        ) : (
+                          <p className="whitespace-pre-line text-sm leading-relaxed">
+                            {typeof message.message_content === 'object' ? JSON.stringify(message.message_content) : message.message_content}
+                          </p>
+                        )}
                         
                         {message.message_type === "ASSISTANT" && message.course_data && (
                           <div className="mt-4 pt-4 border-t border-gray-200">
@@ -817,15 +855,37 @@ export default function CoursePage() {
         <div className="flex gap-3 max-w-4xl mx-auto">
           <Textarea
             className="flex-1 min-h-[60px] resize-none"
-            placeholder={currentSessionId ? "메시지를 입력하세요..." : "새 추천을 받으려면 '새 채팅' 버튼을 눌러주세요."}
+            placeholder={(() => {
+              // 마지막 메시지가 버튼인지만 확인
+              const lastMessage = messages[messages.length - 1];
+              const hasButtons = lastMessage && 
+                lastMessage.message_type === "ASSISTANT" &&
+                typeof lastMessage.message_content === 'object' &&
+                lastMessage.message_content?.message_type === 'buttons';
+              return hasButtons ? "위 버튼을 선택해주세요" : currentSessionId ? "메시지를 입력하세요..." : "새 추천을 받으려면 '새 채팅' 버튼을 눌러주세요.";
+            })()}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            disabled={isLoading || !currentSessionId}
+            disabled={isLoading || !currentSessionId || (() => {
+              // 마지막 메시지가 버튼인지만 확인
+              const lastMessage = messages[messages.length - 1];
+              return lastMessage && 
+                lastMessage.message_type === "ASSISTANT" &&
+                typeof lastMessage.message_content === 'object' &&
+                lastMessage.message_content?.message_type === 'buttons';
+            })()}
           />
           <Button
-            onClick={currentSessionId ? sendMessage : handleFullSubmit}
-            disabled={isLoading || !input.trim()}
+            onClick={currentSessionId ? () => sendMessage() : handleFullSubmit}
+            disabled={isLoading || !input.trim() || (() => {
+              // 마지막 메시지가 버튼인지만 확인
+              const lastMessage = messages[messages.length - 1];
+              return lastMessage && 
+                lastMessage.message_type === "ASSISTANT" &&
+                typeof lastMessage.message_content === 'object' &&
+                lastMessage.message_content?.message_type === 'buttons';
+            })()}
             className="bg-pink-600 hover:bg-pink-700 px-6"
           >
             <Send className="h-5 w-5" />
