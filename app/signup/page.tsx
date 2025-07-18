@@ -8,9 +8,11 @@ import { TokenStorage, UserStorage } from "@/lib/storage";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/auth-context"; 
 
 export default function SignupPage() {
   const router = useRouter();
+  const { login } = useAuth(); 
   const [nickname, setNickname] = useState("");
   const [nicknameStatus, setNicknameStatus] = useState<"unchecked" | "checking" | "available" | "duplicated">(
     "unchecked"
@@ -56,12 +58,17 @@ export default function SignupPage() {
         nickname: nickname
       });
 
-      // 로컬 스토리지의 사용자 정보 업데이트
-      UserStorage.set({
+      // 업데이트된 사용자 정보 객체 생성
+      const updatedUser = {
         ...currentUser,
         nickname: nickname
-      });
+      };
 
+      // 3. localStorage와 AuthContext 상태를 모두 업데이트
+      UserStorage.set(updatedUser);
+      login(updatedUser); // AuthContext의 상태를 최신 정보로 업데이트
+
+      
       alert("닉네임 설정이 완료되었습니다!");
       router.push("/course");
     } catch (err: any) {
