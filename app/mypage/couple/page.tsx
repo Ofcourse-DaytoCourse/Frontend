@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { ArrowLeft, Heart, UserPlus, Check, X, Trash2, Eye, Send, Clock } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
+import { useTheme } from "@/contexts/theme-context";
 
 interface CoupleInfo {
   couple_id: number;
@@ -34,6 +35,7 @@ interface ReceivedRequest {
 
 export default function CouplePage() {
   const { user } = useAuth();
+  const { themeConfig } = useTheme();
   const [hasPartner, setHasPartner] = useState(false);
   const [partnerInfo, setPartnerInfo] = useState<CoupleInfo | null>(null);
   const [partnerNickname, setPartnerNickname] = useState("");
@@ -194,38 +196,55 @@ export default function CouplePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-16">
+    <div className={`min-h-screen bg-gradient-to-br ${themeConfig.bgGradient} pt-16`}>
       <div className="max-w-2xl mx-auto p-6">
         <div className="mb-6">
-          <Link href="/mypage" className="inline-flex items-center text-pink-600 hover:text-pink-700 mb-4">
+          <Link href="/mypage" className={`inline-flex items-center text-${themeConfig.accent} hover:opacity-80 mb-4 transition-colors`}>
             <ArrowLeft className="h-4 w-4 mr-1" />
             마이페이지로 돌아가기
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900">연인 관리</h1>
+          <div className="flex items-center gap-3">
+            <div className={`p-2 bg-gradient-to-r ${themeConfig.primary} rounded-full`}>
+              <Heart className="h-6 w-6 text-white" />
+            </div>
+            <h1 className={`text-3xl font-bold bg-gradient-to-r ${themeConfig.gradientFrom} ${themeConfig.gradientTo} bg-clip-text text-transparent`}>연인 관리</h1>
+          </div>
         </div>
 
         <div className="space-y-6">
           {/* 연인이 있는 경우 */}
           {hasPartner && partnerInfo && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Heart className="h-5 w-5 text-pink-600" />
+            <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-pink-500 to-red-500 text-white">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <Heart className="h-6 w-6 animate-pulse" />
                   현재 연인
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="font-medium text-lg">{partnerInfo.partner_nickname}</p>
-                    <p className="text-sm text-gray-500">커플 ID: {partnerInfo.couple_id}</p>
-                    <p className="text-sm text-gray-500">
-                      연결일: {new Date(partnerInfo.created_at).toLocaleDateString()}
-                    </p>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-gradient-to-r from-pink-400 to-red-400 rounded-full flex items-center justify-center">
+                        <Heart className="h-6 w-6 text-white" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-xl text-gray-800">{partnerInfo.partner_nickname}</p>
+                        <p className="text-sm text-gray-500">커플 ID: #{partnerInfo.couple_id}</p>
+                      </div>
+                    </div>
+                    <div className="bg-gradient-to-r from-pink-50 to-red-50 p-3 rounded-lg border-l-4 border-pink-400">
+                      <p className="text-sm text-gray-600 flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-pink-500" />
+                        연결일: {new Date(partnerInfo.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="h-3 w-3 bg-green-500 rounded-full"></div>
-                    <span className="text-sm text-green-600">연결됨</span>
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="flex items-center gap-2 bg-green-50 px-3 py-1 rounded-full border border-green-200">
+                      <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <span className="text-sm font-medium text-green-700">연결됨</span>
+                    </div>
                   </div>
                 </div>
                 <Button 
@@ -233,6 +252,7 @@ export default function CouplePage() {
                   variant="destructive" 
                   size="sm"
                   disabled={isLoading}
+                  className="bg-red-500 hover:bg-red-600 transition-all duration-200"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />연인 관계 해제
                 </Button>
@@ -244,28 +264,32 @@ export default function CouplePage() {
           {!hasPartner && (
             <>
               {/* 연인 신청 보내기 */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <UserPlus className="h-5 w-5" />
+              <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+                <CardHeader className="bg-gradient-to-r from-pink-500 to-purple-500 text-white">
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <UserPlus className="h-6 w-6" />
                     연인 신청
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="partner-nickname">연인 신청할 대상 닉네임</Label>
-                    <div className="flex gap-2">
+                <CardContent className="space-y-6 p-6">
+                  <div className="space-y-3">
+                    <Label htmlFor="partner-nickname" className="text-gray-700 font-medium flex items-center gap-2">
+                      <Heart className="h-4 w-4 text-pink-500" />
+                      연인 신청할 대상 닉네임
+                    </Label>
+                    <div className="flex gap-3">
                       <Input
                         id="partner-nickname"
                         value={partnerNickname}
                         onChange={(e) => setPartnerNickname(e.target.value)}
                         placeholder="닉네임을 입력하세요"
                         disabled={isLoading}
+                        className="border-gray-200 focus:border-pink-400 focus:ring-2 focus:ring-pink-200 transition-all duration-200"
                       />
                       <Button
                         onClick={handleSendRequest}
                         disabled={!partnerNickname.trim() || isLoading}
-                        className="bg-pink-600 hover:bg-pink-700"
+                        className="bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white shadow-lg transition-all duration-200"
                       >
                         <Send className="h-4 w-4 mr-2" />
                         신청
@@ -273,15 +297,17 @@ export default function CouplePage() {
                     </div>
                   </div>
 
-                  <Button 
-                    onClick={handleViewRequests} 
-                    variant="outline" 
-                    className="w-full bg-transparent"
-                    disabled={isLoading}
-                  >
-                    <Eye className="h-4 w-4 mr-2" />
-                    연인 신청 현황 보기 (보낸: {sentRequests.length}, 받은: {receivedRequests.length})
-                  </Button>
+                  <div className="bg-gradient-to-r from-pink-50 to-purple-50 p-4 rounded-lg border border-pink-200">
+                    <Button 
+                      onClick={handleViewRequests} 
+                      variant="outline" 
+                      className="w-full bg-white/50 border-pink-300 hover:bg-pink-50 transition-all duration-200"
+                      disabled={isLoading}
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      연인 신청 현황 보기 (보낸: {sentRequests.length}, 받은: {receivedRequests.length})
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -289,32 +315,38 @@ export default function CouplePage() {
               {showRequests && (
                 <>
                   {/* 받은 연인 신청 */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Heart className="h-5 w-5 text-red-500" />
+                  <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+                    <CardHeader className="bg-gradient-to-r from-red-500 to-pink-500 text-white">
+                      <CardTitle className="flex items-center gap-2 text-xl">
+                        <Heart className="h-6 w-6 animate-pulse" />
                         받은 연인 신청
                       </CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-6">
                       {receivedRequests.length > 0 ? (
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                           {receivedRequests.map((request) => (
                             <div
                               key={request.request_id}
-                              className="flex items-center justify-between p-3 border border-gray-200 rounded-lg bg-red-50"
+                              className="flex items-center justify-between p-4 border border-red-200 rounded-lg bg-gradient-to-r from-red-50 to-pink-50 hover:shadow-md transition-all duration-200"
                             >
-                              <div>
-                                <p className="font-medium">{request.requester_nickname}</p>
-                                <p className="text-sm text-gray-500">
-                                  신청일: {new Date(request.requested_at).toLocaleDateString()}
-                                </p>
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-gradient-to-r from-red-400 to-pink-400 rounded-full flex items-center justify-center">
+                                  <Heart className="h-5 w-5 text-white" />
+                                </div>
+                                <div>
+                                  <p className="font-bold text-lg text-gray-800">{request.requester_nickname}</p>
+                                  <p className="text-sm text-gray-600 flex items-center gap-1">
+                                    <Calendar className="h-3 w-3" />
+                                    신청일: {new Date(request.requested_at).toLocaleDateString()}
+                                  </p>
+                                </div>
                               </div>
                               <div className="flex gap-2">
                                 <Button
                                   onClick={() => handleAcceptRequest(request.request_id)}
                                   size="sm"
-                                  className="bg-green-600 hover:bg-green-700"
+                                  className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg transition-all duration-200"
                                   disabled={isLoading}
                                 >
                                   <Check className="h-4 w-4 mr-1" />수락
@@ -324,6 +356,7 @@ export default function CouplePage() {
                                   variant="destructive"
                                   size="sm"
                                   disabled={isLoading}
+                                  className="bg-red-500 hover:bg-red-600 transition-all duration-200"
                                 >
                                   <X className="h-4 w-4 mr-1" />거절
                                 </Button>
@@ -332,58 +365,74 @@ export default function CouplePage() {
                           ))}
                         </div>
                       ) : (
-                        <p className="text-gray-500 text-center py-4">받은 연인 신청이 없습니다</p>
+                        <div className="text-center py-8">
+                          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <Heart className="h-8 w-8 text-gray-400" />
+                          </div>
+                          <p className="text-gray-500">받은 연인 신청이 없습니다</p>
+                        </div>
                       )}
                     </CardContent>
                   </Card>
 
                   {/* 보낸 연인 신청 */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Send className="h-5 w-5 text-blue-500" />
+                  <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+                    <CardHeader className="bg-gradient-to-r from-blue-500 to-purple-500 text-white">
+                      <CardTitle className="flex items-center gap-2 text-xl">
+                        <Send className="h-6 w-6" />
                         보낸 연인 신청
                       </CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-6">
                       {sentRequests.length > 0 ? (
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                           {sentRequests.map((request) => (
                             <div
                               key={request.request_id}
-                              className="flex items-center justify-between p-3 border border-gray-200 rounded-lg bg-blue-50"
+                              className="flex items-center justify-between p-4 border border-blue-200 rounded-lg bg-gradient-to-r from-blue-50 to-purple-50 hover:shadow-md transition-all duration-200"
                             >
-                              <div>
-                                <p className="font-medium">{request.partner_nickname}</p>
-                                <p className="text-sm text-gray-500">
-                                  신청일: {new Date(request.requested_at).toLocaleDateString()}
-                                </p>
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full flex items-center justify-center">
+                                  <Send className="h-5 w-5 text-white" />
+                                </div>
+                                <div>
+                                  <p className="font-bold text-lg text-gray-800">{request.partner_nickname}</p>
+                                  <p className="text-sm text-gray-600 flex items-center gap-1">
+                                    <Calendar className="h-3 w-3" />
+                                    신청일: {new Date(request.requested_at).toLocaleDateString()}
+                                  </p>
+                                </div>
                               </div>
                               <div className="flex items-center gap-2">
                                 {request.status === "pending" && (
-                                  <>
-                                    <Clock className="h-4 w-4 text-yellow-500" />
-                                    <span className="text-sm text-yellow-600">대기중</span>
-                                  </>
+                                  <div className="flex items-center gap-2 bg-yellow-50 px-3 py-1 rounded-full border border-yellow-200">
+                                    <Clock className="h-4 w-4 text-yellow-500 animate-pulse" />
+                                    <span className="text-sm font-medium text-yellow-700">대기중</span>
+                                  </div>
                                 )}
                                 {request.status === "accepted" && (
-                                  <>
+                                  <div className="flex items-center gap-2 bg-green-50 px-3 py-1 rounded-full border border-green-200">
                                     <Check className="h-4 w-4 text-green-500" />
-                                    <span className="text-sm text-green-600">수락됨</span>
-                                  </>
+                                    <span className="text-sm font-medium text-green-700">수락됨</span>
+                                  </div>
                                 )}
                                 {request.status === "rejected" && (
-                                  <>
+                                  <div className="flex items-center gap-2 bg-red-50 px-3 py-1 rounded-full border border-red-200">
                                     <X className="h-4 w-4 text-red-500" />
-                                    <span className="text-sm text-red-600">거절됨</span>
-                                  </>
+                                    <span className="text-sm font-medium text-red-700">거절됨</span>
+                                  </div>
                                 )}
                               </div>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <p className="text-gray-500 text-center py-4">보낸 연인 신청이 없습니다</p>
+                        <div className="text-center py-8">
+                          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <Send className="h-8 w-8 text-gray-400" />
+                          </div>
+                          <p className="text-gray-500">보낸 연인 신청이 없습니다</p>
+                        </div>
                       )}
                     </CardContent>
                   </Card>

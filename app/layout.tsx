@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import { AuthProvider } from "@/contexts/auth-context"
+import { ThemeProvider } from "@/contexts/theme-context"
 import { AuthGuard } from "@/components/auth-guard"
 import { GlobalMenu } from "@/components/sidebar"
 import "./globals.css"
@@ -22,13 +23,15 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className={inter.className}>
-        <AuthProvider>
-          <AuthGuard>
-            <GlobalMenu>
-              <div className="min-h-screen bg-background">{children}</div>
-            </GlobalMenu>
-          </AuthGuard>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <AuthGuard>
+              <GlobalMenu>
+                <div className="min-h-screen bg-background">{children}</div>
+              </GlobalMenu>
+            </AuthGuard>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

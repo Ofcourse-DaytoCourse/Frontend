@@ -7,12 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Heart, User, Star, Sparkles, Calendar, Gift } from "lucide-react";
 import Link from "next/link";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import { useTheme } from "@/contexts/theme-context";
 
 // MBTI 16가지 타입
 const MBTI_TYPES = [
@@ -32,6 +33,7 @@ const age_TYPES = [
 
 
 export default function MyProfilePage() {
+  const { themeConfig } = useTheme();
   const [user, setUser] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [originalNickname, setOriginalNickname] = useState("");
@@ -169,30 +171,42 @@ export default function MyProfilePage() {
   if (!user) return <div className="p-6">로딩 중...</div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-16">
+    <div className={`min-h-screen bg-gradient-to-br ${themeConfig.bgGradient} pt-16`}>
       <div className="max-w-2xl mx-auto p-6">
         <div className="mb-6">
-          <Link href="/mypage" className="inline-flex items-center text-pink-600 hover:text-pink-700 mb-4">
+          <Link href="/mypage" className={`inline-flex items-center text-${themeConfig.accent} hover:opacity-80 mb-4 transition-colors`}>
             <ArrowLeft className="h-4 w-4 mr-1" />
             마이페이지로 돌아가기
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900">내 정보</h1>
+          <div className="flex items-center gap-3">
+            <div className={`p-2 bg-gradient-to-r ${themeConfig.primary} rounded-full`}>
+              <User className="h-6 w-6 text-white" />
+            </div>
+            <h1 className={`text-3xl font-bold bg-gradient-to-r ${themeConfig.gradientFrom} ${themeConfig.gradientTo} bg-clip-text text-transparent`}>내 정보</h1>
+          </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>프로필</CardTitle>
+        <Card className="shadow-xl border-0 bg-white/70 backdrop-blur-sm">
+          <CardHeader className={`bg-gradient-to-r ${themeConfig.primary} text-white rounded-t-lg`}>
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <Sparkles className="h-5 w-5" />
+              프로필
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="nickname">닉네임</Label>
+          <CardContent className="space-y-6 p-6">
+            <div className="space-y-3">
+              <Label htmlFor="nickname" className="text-gray-700 font-medium flex items-center gap-2">
+                <User className={`h-4 w-4 text-${themeConfig.accent}`} />
+                닉네임
+              </Label>
               <Input
                 id="nickname"
                 value={form.nickname}
                 disabled={!editing}
                 onChange={(e) => handleChange("nickname", e.target.value)}
-                className={editing && form.nickname !== originalNickname ? 
-                  (nicknameStatus.available ? "border-green-500" : "border-red-500") : ""}
+                className={`transition-all duration-200 ${editing && form.nickname !== originalNickname ? 
+                  (nicknameStatus.available ? "border-green-500 ring-2 ring-green-200" : "border-red-500 ring-2 ring-red-200") : 
+                  `border-gray-200 focus:border-${themeConfig.accent} focus:ring-2 focus:ring-${themeConfig.accent.replace('500', '200')}`} ${!editing ? "bg-gray-50" : ""}`}
               />
               {editing && form.nickname !== originalNickname && (
                 <p className={`text-sm ${nicknameStatus.available ? "text-green-600" : "text-red-600"}`}>
@@ -200,47 +214,53 @@ export default function MyProfilePage() {
                 </p>
               )}
             </div>
-            <div className="space-y-2">
-              <Label>나이</Label>
+            <div className="space-y-3">
+              <Label className="text-gray-700 font-medium flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-blue-500" />
+                나이
+              </Label>
               {editing ? (
                 <Select
                   value={form.profile_detail.age_range}
                   onValueChange={(value) => handleChange("age_range", value)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="border-gray-200 focus:border-pink-400 focus:ring-2 focus:ring-pink-200 transition-all duration-200">
                     <SelectValue placeholder="연령대를 선택해주세요" />
                   </SelectTrigger>
                   <SelectContent>
                     {age_TYPES.map((type) => (
                       <SelectItem key={type} value={type}>
-                        {type}
+                        {type}세
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               ) : (
                 <Input
-                  value={form.profile_detail.age_range}
+                  value={form.profile_detail.age_range ? `${form.profile_detail.age_range}세` : ""}
                   disabled
-                  className="bg-gray-50"
+                  className="bg-gray-50 border-gray-200"
                 />
               )}
             </div>
-            <div className="space-y-2">
-              <Label>성별</Label>
+            <div className="space-y-3">
+              <Label className="text-gray-700 font-medium flex items-center gap-2">
+                <Heart className="h-4 w-4 text-pink-500" />
+                성별
+              </Label>
               {editing ? (
                 <RadioGroup
                   value={form.profile_detail.gender}
                   onValueChange={(value) => handleChange("gender", value)}
-                  className="flex gap-6"
+                  className="flex gap-8"
                 >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="male" id="male" />
-                    <Label htmlFor="male">남성</Label>
+                  <div className="flex items-center space-x-3 p-3 rounded-lg border border-gray-200 hover:border-blue-400 transition-colors">
+                    <RadioGroupItem value="male" id="male" className="text-blue-500" />
+                    <Label htmlFor="male" className="cursor-pointer text-gray-700">남성</Label>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="female" id="female" />
-                    <Label htmlFor="female">여성</Label>
+                  <div className="flex items-center space-x-3 p-3 rounded-lg border border-gray-200 hover:border-pink-400 transition-colors">
+                    <RadioGroupItem value="female" id="female" className="text-pink-500" />
+                    <Label htmlFor="female" className="cursor-pointer text-gray-700">여성</Label>
                   </div>
                 </RadioGroup>
               ) : (
@@ -248,18 +268,21 @@ export default function MyProfilePage() {
                   value={form.profile_detail.gender === "male" ? "남성" : 
                          form.profile_detail.gender === "female" ? "여성" : ""}
                   disabled
-                  className="bg-gray-50"
+                  className="bg-gray-50 border-gray-200"
                 />
               )}
             </div>
-            <div className="space-y-2">
-              <Label>MBTI</Label>
+            <div className="space-y-3">
+              <Label className="text-gray-700 font-medium flex items-center gap-2">
+                <Star className="h-4 w-4 text-yellow-500" />
+                MBTI
+              </Label>
               {editing ? (
                 <Select
                   value={form.profile_detail.mbti}
                   onValueChange={(value) => handleChange("mbti", value)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="border-gray-200 focus:border-pink-400 focus:ring-2 focus:ring-pink-200 transition-all duration-200">
                     <SelectValue placeholder="MBTI를 선택해주세요" />
                   </SelectTrigger>
                   <SelectContent>
@@ -274,58 +297,66 @@ export default function MyProfilePage() {
                 <Input
                   value={form.profile_detail.mbti}
                   disabled
-                  className="bg-gray-50"
+                  className="bg-gray-50 border-gray-200"
                 />
               )}
             </div>
-            <div className="space-y-2">
-              <Label>자동차 소유 여부</Label>
+            <div className="space-y-3">
+              <Label className="text-gray-700 font-medium flex items-center gap-2">
+                <Gift className="h-4 w-4 text-green-500" />
+                자동차 소유 여부
+              </Label>
               {editing ? (
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-3 p-4 rounded-lg border border-gray-200 hover:border-green-400 transition-colors">
                   <Checkbox
                     id="car_owner"
                     checked={form.profile_detail.car_owner}
                     onCheckedChange={(checked) => handleChange("car_owner", checked)}
+                    className="data-[state=checked]:bg-green-500 data-[state=checked]:border-green-500"
                   />
-                  <Label htmlFor="car_owner">자동차를 소유하고 있습니다</Label>
+                  <Label htmlFor="car_owner" className="cursor-pointer text-gray-700">자동차를 소유하고 있습니다</Label>
                 </div>
               ) : (
                 <Input
                   value={form.profile_detail.car_owner ? "소유" : "미소유"}
                   disabled
-                  className="bg-gray-50"
+                  className="bg-gray-50 border-gray-200"
                 />
               )}
             </div>
-            <div className="space-y-2">
-              <Label>코스 추천 시 고려사항</Label>
-              <p className="text-sm text-gray-500">
-                데이트 코스를 추천받을 때 AI가 고려했으면 하는 내용을 자유롭게 적어주세요
+            <div className="space-y-3">
+              <Label className="text-gray-700 font-medium flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-purple-500" />
+                코스 추천 시 고려사항
+              </Label>
+              <p className="text-sm text-gray-500 bg-blue-50 p-3 rounded-lg border-l-4 border-blue-400">
+                💡 데이트 코스를 추천받을 때 AI가 고려했으면 하는 내용을 자유롭게 적어주세요
               </p>
               {editing ? (
                 <Textarea
                   value={form.profile_detail.preferences}
                   onChange={(e) => handleChange("preferences", e.target.value)}
                   placeholder="예: 조용하고 분위기 좋은 곳 좋아해요, 대중교통 접근 쉬운 곳으로, 비용은 5만원 이하로..."
-                  className="min-h-[80px] resize-none"
+                  className="min-h-[80px] resize-none border-gray-200 focus:border-pink-400 focus:ring-2 focus:ring-pink-200 transition-all duration-200"
                 />
               ) : (
                 <Textarea
                   value={form.profile_detail.preferences || "설정된 고려사항이 없습니다"}
                   disabled
-                  className="bg-gray-50 min-h-[80px] resize-none"
+                  className="bg-gray-50 min-h-[80px] resize-none border-gray-200"
                 />
               )}
             </div>
 
-            <div className="pt-4">
+            <div className="pt-6 border-t border-gray-100">
               {editing ? (
-                <div className="flex gap-2">
+                <div className="flex gap-3">
                   <Button 
                     onClick={handleUpdate} 
-                    className="bg-pink-600 hover:bg-pink-700"
+                    className="bg-gradient-to-r from-pink-500 to-blue-500 hover:from-pink-600 hover:to-blue-600 text-white shadow-lg transition-all duration-200 flex-1"
                     disabled={!nicknameStatus.available && form.nickname !== originalNickname}
                   >
+                    <Sparkles className="h-4 w-4 mr-2" />
                     저장
                   </Button>
                   <Button 
@@ -341,12 +372,17 @@ export default function MyProfilePage() {
                       setNicknameStatus({ checking: false, available: true, message: "" });
                     }} 
                     variant="outline"
+                    className="border-gray-300 hover:bg-gray-50 transition-all duration-200"
                   >
                     취소
                   </Button>
                 </div>
               ) : (
-                <Button onClick={() => setEditing(true)} className="bg-pink-600 hover:bg-pink-700">
+                <Button 
+                  onClick={() => setEditing(true)} 
+                  className="bg-gradient-to-r from-pink-500 to-blue-500 hover:from-pink-600 hover:to-blue-600 text-white shadow-lg transition-all duration-200 w-full"
+                >
+                  <User className="h-4 w-4 mr-2" />
                   수정
                 </Button>
               )}

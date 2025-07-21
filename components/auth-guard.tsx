@@ -23,7 +23,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
     const token = TokenStorage.get();
     const user = UserStorage.get();
-    const openPaths = ["/login", "/signup", "/login/callback"];
+    const openPaths = ["/login", "/signup", "/login/callback", "/admin"];
 
     const isOpenPath = openPaths.some(p => pathname.startsWith(p));
 

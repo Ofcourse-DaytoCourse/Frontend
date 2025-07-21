@@ -7,20 +7,11 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Menu, X, Plus, MessageCircle, User, List, Share2, Home, ChevronDown, ChevronUp, Trash2 } from "lucide-react"
+import { Menu, X, Plus, MessageCircle, User, List, Share2, Home, Trash2, CreditCard, DollarSign, Heart, Sparkles, Star, Gift } from "lucide-react"
 import { TokenStorage, clearAuthStorage } from "@/lib/storage"
 import { useAuth } from "@/contexts/auth-context"
+import { useBalanceData } from "@/hooks/use-balance-data"
 
-interface ChatSession {
-  session_id: string;
-  session_title: string;
-  session_status: string;
-  created_at: string;
-  last_activity_at: string;
-  message_count: number;
-  has_course: boolean;
-  preview_message: string;
-}
 
 interface GlobalMenuProps {
   children?: React.ReactNode
@@ -28,12 +19,12 @@ interface GlobalMenuProps {
 
 export function GlobalMenu({ children }: GlobalMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [isMenuExpanded, setIsMenuExpanded] = useState(false)
   const { user } = useAuth();
   const [userInfo, setUserInfo] = useState({ name: "", nickname: "", user_id: "" })
-  const [chatHistory, setChatHistory] = useState<ChatSession[]>([])
-  const [isLoadingChats, setIsLoadingChats] = useState(false)
   const pathname = usePathname()
+  
+  // 잔액 데이터 훅 - 로그인된 사용자만 자동 새로고침 비활성화 (페이지 새로고침 시에만 업데이트)
+  const { balance, isLoading: isBalanceLoading, error: balanceError, refreshBalance } = useBalanceData(false)
 
   // 사이드바를 숨길 페이지들 (로그인/회원가입 페이지만)
   const hideSidebarPages = ["/login", "/signup"]
@@ -50,88 +41,22 @@ export function GlobalMenu({ children }: GlobalMenuProps) {
     }
   }, [user]);
 
-  // 채팅 기록 로드
-  const loadChatHistory = async () => {
-    if (!userInfo.user_id) return;
-
-    setIsLoadingChats(true);
-    try {
-      const token = TokenStorage.get();
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/chat/sessions/user/${userInfo.user_id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setChatHistory(data.sessions || []);
-      } else {
-        // 401 Unauthorized 등의 에러 처리
-        if (response.status === 401) {
-          handleLogout();
-        }
-      }
-    } catch (error) {
-      console.error('채팅 기록 로드 실패:', error);
-    } finally {
-      setIsLoadingChats(false);
-    }
-  };
-
-  // 사이드바가 열릴 때마다 채팅 기록 새로고침
+  // 사이드바가 열릴 때 잔액 새로고침
   useEffect(() => {
     if (isOpen && userInfo.user_id) {
-      loadChatHistory();
+      // 포인트 새로고침
+      refreshBalance();
     }
-  }, [isOpen, userInfo.user_id]);
+  }, [isOpen, userInfo.user_id, refreshBalance]);
 
   const menuItems = [
+    { href: "/payments/guide", label: "충전하기", icon: CreditCard },
+    { href: "/payments/dashboard", label: "잔액 확인", icon: DollarSign },
     { href: "/list", label: "저장된 코스", icon: List },
     { href: "/shared", label: "공유된 코스", icon: Share2 },
     { href: "/mypage", label: "마이페이지", icon: User },
   ]
 
-  // 채팅 세션을 클릭했을 때 해당 세션으로 이동
-  const handleChatClick = (sessionId: string) => {
-    setIsOpen(false);
-    window.location.href = `/course?session=${sessionId}`;
-  };
-
-  // 채팅 세션 삭제
-  const handleDeleteChat = async (sessionId: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // 부모 클릭 이벤트 방지
-    
-    if (!confirm("정말로 이 채팅을 삭제하시겠습니까?")) {
-      return;
-    }
-
-    try {
-      const token = TokenStorage.get();
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/chat/sessions/${sessionId}`,
-        {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        // 목록에서 해당 세션 제거
-        setChatHistory(prev => prev.filter(chat => chat.session_id !== sessionId));
-      } else {
-        alert('채팅 삭제에 실패했습니다.');
-      }
-    } catch (error) {
-      console.error('채팅 삭제 실패:', error);
-      alert('채팅 삭제 중 오류가 발생했습니다.');
-    }
-  };
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/")
 
@@ -155,153 +80,189 @@ export function GlobalMenu({ children }: GlobalMenuProps) {
           variant="outline"
           size="sm"
           onClick={() => setIsOpen(true)}
-          className="bg-white shadow-md hover:shadow-lg"
+          className="bg-white/80 backdrop-blur-lg border-2 border-pink-200 hover:border-pink-300 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105"
         >
-          <Menu className="h-5 w-5" />
+          <Menu className="h-5 w-5 text-pink-600" />
         </Button>
       </div>
 
-      {/* 오버레이 */}
-      {isOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={() => setIsOpen(false)} />}
+      {/* 오버레이 - 검정 배경 제거하고 투명 + 블러로 변경 */}
+      {isOpen && <div className="fixed inset-0 bg-white/10 backdrop-blur-md z-40" onClick={() => setIsOpen(false)} />}
 
       {/* 슬라이드 메뉴 */}
       <div
-        className={`fixed top-0 left-0 h-full w-80 bg-white shadow-xl transform transition-transform duration-300 ease-in-out z-50 ${
+        className={`fixed top-0 left-0 h-full w-80 bg-gradient-to-b from-white via-pink-50/50 to-purple-50/50 backdrop-blur-lg border-r-2 border-pink-200/50 shadow-2xl transform transition-transform duration-300 ease-in-out z-50 ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full relative overflow-hidden">
+          {/* 배경 장식 */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute -top-10 -left-10 w-40 h-40 bg-gradient-to-br from-pink-300/20 to-rose-400/20 rounded-full blur-3xl animate-pulse"></div>
+            <div className="absolute top-1/2 -right-10 w-32 h-32 bg-gradient-to-br from-purple-300/20 to-pink-400/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
+          </div>
+
           {/* 헤더 */}
-          <div className="p-4 border-b border-gray-200">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-pink-600">데이트 코스 추천</h2>
-              <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)}>
-                <X className="h-4 w-4" />
+          <div className="relative p-6 border-b border-pink-200/50">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-rose-400 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg transform rotate-12 hover:rotate-0 transition-transform duration-300">
+                  <Heart className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black bg-gradient-to-r from-rose-600 to-pink-600 bg-clip-text text-transparent">데이트 코스 추천</h2>
+                  <p className="text-xs text-pink-500 font-medium">Love is in the details ✨</p>
+                </div>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setIsOpen(false)}
+                className="w-8 h-8 rounded-full hover:bg-pink-100 transition-colors duration-300"
+              >
+                <X className="h-4 w-4 text-pink-600" />
               </Button>
             </div>
 
-            <div className="flex items-center gap-3 p-3 bg-pink-50 rounded-lg">
-              <Avatar>
-                <AvatarImage src="/placeholder.svg" />
-                <AvatarFallback>
-                  <User className="h-4 w-4" />
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <p className="font-medium">{userInfo.nickname}님</p>
+            <div className="space-y-4">
+              <div className="bg-gradient-to-br from-pink-50 to-rose-50 p-4 rounded-2xl border border-pink-200 shadow-lg">
+                <div className="flex items-center gap-4">
+                  <div className="relative">
+                    <Avatar className="w-12 h-12 border-2 border-pink-200 shadow-lg">
+                      <AvatarImage src="/placeholder.svg" />
+                      <AvatarFallback className="bg-gradient-to-br from-rose-400 to-pink-500 text-white">
+                        <User className="h-5 w-5" />
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">
+                      <Sparkles className="w-2 h-2 text-white" />
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-bold text-gray-800">{userInfo.nickname}님</p>
+                    <div className="flex items-center gap-1 mt-1">
+                      {[...Array(3)].map((_, i) => (
+                        <Star key={i} className="w-3 h-3 text-yellow-400 fill-current" />
+                      ))}
+                      <span className="text-xs text-gray-500 ml-1">VIP 회원</span>
+                    </div>
+                  </div>
+                </div>
               </div>
+              
+              {/* 잔액 표시 - 로그인된 사용자만 */}
+              {user && (
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-2xl border border-blue-200 shadow-lg">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-full flex items-center justify-center shadow-lg">
+                      <DollarSign className="h-4 w-4 text-white" />
+                    </div>
+                    <span className="font-bold text-blue-800">보유 포인트</span>
+                  </div>
+                  <div>
+                    {isBalanceLoading ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin"></div>
+                        <span className="text-sm text-gray-500">로딩중...</span>
+                      </div>
+                    ) : balanceError ? (
+                      null // 에러 시에는 표시하지 않기
+                    ) : balance ? (
+                      <div className="flex items-center justify-between">
+                        <span className="text-2xl font-black text-blue-900">
+                          {balance.total_balance.toLocaleString()}원
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {[...Array(5)].map((_, i) => (
+                            <Star key={i} className="w-3 h-3 text-yellow-400 fill-current" />
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-gray-500">로딩중...</span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* 새 채팅 생성 버튼 */}
-          <div className="p-4 border-b border-gray-200">
+          {/* 채팅 관련 버튼들 */}
+          <div className="relative p-6 border-b border-pink-200/50 space-y-4">
+            {/* 새 채팅 생성 버튼 */}
             <Button
-              className="w-full bg-pink-600 hover:bg-pink-700"
+              className="w-full bg-gradient-to-r from-rose-500 via-pink-500 to-purple-500 hover:from-rose-600 hover:via-pink-600 hover:to-purple-600 text-white py-4 rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105"
               onClick={() => {
                 setIsOpen(false)
                 window.location.href = "/course"
               }}
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-5 w-5 mr-3" />
               새로운 채팅 생성
+              <Sparkles className="h-4 w-4 ml-3 animate-pulse" />
             </Button>
-          </div>
-
-          {/* 채팅 기록 */}
-          <div className="flex-1 p-4 overflow-auto border-b border-gray-200">
-            <h3 className="font-medium mb-3 text-gray-700">채팅 기록</h3>
             
-            {isLoadingChats ? (
-              <div className="text-center py-4">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-pink-600 mx-auto"></div>
-                <p className="text-sm text-gray-500 mt-2">로딩 중...</p>
-              </div>
-            ) : chatHistory.length > 0 ? (
-              <div className="space-y-2">
-                {chatHistory.map((chat) => (
-                  <div
-                    key={chat.session_id}
-                    className="p-3 rounded-lg hover:bg-gray-50 cursor-pointer border border-gray-100 transition-colors relative group"
-                    onClick={() => handleChatClick(chat.session_id)}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <MessageCircle className="h-4 w-4 text-gray-400" />
-                      <span className="font-medium text-sm truncate">{chat.session_title}</span>
-                      {chat.has_course && (
-                        <div className="w-2 h-2 bg-green-500 rounded-full" title="코스 완성됨"></div>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity p-1 h-auto hover:bg-red-100"
-                        onClick={(e) => handleDeleteChat(chat.session_id, e)}
-                      >
-                        <Trash2 className="h-3 w-3 text-red-500" />
-                      </Button>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-gray-500 truncate">{chat.preview_message}</p>
-                      <span className={`text-xs px-2 py-1 rounded-full ${
-                        chat.session_status === 'COMPLETED' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        {chat.session_status === 'COMPLETED' ? '완료' : '진행중'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {new Date(chat.last_activity_at).toLocaleDateString('ko-KR')} • {chat.message_count}개 메시지
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <MessageCircle className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">아직 채팅 기록이 없습니다</p>
-                <p className="text-xs text-gray-400">새로운 채팅을 시작해보세요!</p>
-              </div>
-            )}
+            {/* 채팅 기록 보기 버튼 */}
+            <Button
+              variant="outline"
+              className="w-full border-2 border-pink-300 text-pink-600 hover:bg-pink-50 py-3 rounded-2xl shadow-lg transition-all duration-300"
+              onClick={() => {
+                setIsOpen(false)
+                window.location.href = "/course"
+              }}
+            >
+              <MessageCircle className="h-5 w-5 mr-3" />
+              채팅 기록 보기
+            </Button>
           </div>
 
-          {/* 슬라이드 팝업 메뉴 */}
-          <div className="bg-gray-50">
-            <Button
-              variant="ghost"
-              className="w-full flex items-center justify-between p-4 h-auto text-left hover:bg-gray-100"
-              onClick={() => setIsMenuExpanded(!isMenuExpanded)}
-            >
-              <span className="font-medium text-gray-700">메뉴</span>
-              {isMenuExpanded ? (
-                <ChevronUp className="h-4 w-4 text-gray-500" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-gray-500" />
-              )}
-            </Button>
-
-            <div
-              className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                isMenuExpanded ? "max-h-64 opacity-100" : "max-h-0 opacity-0"
-              }`}
-            >
-              <div className="px-4 pb-4 space-y-1">
-                {menuItems.map((item) => {
+          {/* 항상 표시되는 메뉴 */}
+          <div className="relative bg-gradient-to-b from-purple-50/50 to-pink-50/50">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-8 h-8 bg-gradient-to-br from-pink-400 to-rose-500 rounded-full flex items-center justify-center shadow-lg">
+                  <Gift className="h-4 w-4 text-white" />
+                </div>
+                <span className="font-bold text-gray-800">빠른 메뉴</span>
+              </div>
+              
+              <div className="space-y-2">
+                {menuItems.map((item, index) => {
                   const Icon = item.icon
                   return (
                     <Link
                       key={item.href}
                       href={item.href}
                       onClick={() => setIsOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                        isActive(item.href) ? "bg-pink-100 text-pink-700 font-medium" : "text-gray-700 hover:bg-white"
+                      className={`group flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-300 transform hover:scale-[1.02] ${
+                        isActive(item.href) 
+                          ? "bg-gradient-to-r from-pink-100 to-rose-100 text-pink-700 font-bold border-2 border-pink-200 shadow-lg" 
+                          : "text-gray-700 hover:bg-white/80 hover:shadow-lg"
                       }`}
                     >
-                      <Icon className="h-4 w-4" />
-                      {item.label}
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${
+                        isActive(item.href)
+                          ? "bg-gradient-to-br from-pink-400 to-rose-500"
+                          : `bg-gradient-to-br ${
+                              index % 4 === 0 ? 'from-blue-400 to-indigo-500' :
+                              index % 4 === 1 ? 'from-green-400 to-emerald-500' :
+                              index % 4 === 2 ? 'from-purple-400 to-pink-500' :
+                              'from-orange-400 to-red-500'
+                            } group-hover:scale-110`
+                      }`}>
+                        <Icon className="h-4 w-4 text-white" />
+                      </div>
+                      <span className="font-medium">{item.label}</span>
+                      {isActive(item.href) && (
+                        <div className="ml-auto flex items-center gap-1">
+                          {[...Array(3)].map((_, i) => (
+                            <Star key={i} className="w-3 h-3 text-yellow-400 fill-current" />
+                          ))}
+                        </div>
+                      )}
                     </Link>
                   )
                 })}
-
               </div>
             </div>
           </div>
