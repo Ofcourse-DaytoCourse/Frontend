@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, Edit3, Trash2, Share2, Heart, MapPin, Phone, Star, Sparkles, Clock, Navigation, Gift } from "lucide-react";
+import { ReviewModal } from "@/components/ReviewModal";
 
 export default function CourseDetailPage() {
   const { courseId } = useParams();
@@ -21,6 +22,12 @@ export default function CourseDetailPage() {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [reviewModal, setReviewModal] = useState({
+    isOpen: false,
+    placeId: "",
+    placeName: "",
+  });
+  const [reviewPermissions, setReviewPermissions] = useState<{[key: string]: {can_write: boolean, reason: string}}>({});
 
   useEffect(() => {
     const userData = UserStorage.get();
@@ -44,6 +51,40 @@ export default function CourseDetailPage() {
         setCourse(data.course);
         setTitle(data.course.title);
         setDescription(data.course.description);
+
+        // 각 장소별 후기 작성 권한 확인
+        if (data.course.places && token) {
+          console.log("🔍 코스 데이터:", data.course.places);
+          
+          const { checkReviewPermission } = await import("@/lib/reviews-api");
+          const permissions: {[key: string]: {can_write: boolean, reason: string}} = {};
+          
+          for (const place of data.course.places) {
+            const placeId = place.place_info?.place_id || place.place_id;
+            console.log("🔍 장소 처리 중:", { 
+              place_name: place.place_info?.name || place.name,
+              place_id: placeId,
+              course_id: Number(courseId)
+            });
+            
+            if (placeId) {
+              try {
+                console.log("🔍 권한 확인 API 호출:", placeId);
+                const permission = await checkReviewPermission(placeId, Number(courseId), token);
+                console.log("🔍 권한 확인 결과:", permission);
+                permissions[placeId] = permission;
+              } catch (err) {
+                console.error("🚨 권한 확인 오류:", err);
+                permissions[placeId] = { can_write: false, reason: "권한 확인 실패" };
+              }
+            } else {
+              console.error("🚨 place_id가 없음:", place);
+              permissions[placeId || "unknown"] = { can_write: false, reason: "장소 ID 없음" };
+            }
+          }
+          console.log("🔍 최종 권한 목록:", permissions);
+          setReviewPermissions(permissions);
+        }
       } catch (err: any) {
         console.error("코스 상세 정보 조회 실패:", err);
         alert("코스 상세 정보를 불러오는 데 실패했습니다: " + err.message);
@@ -427,6 +468,51 @@ export default function CourseDetailPage() {
                                     {place.phone}
                                   </a>
                                 )}
+                                
+                                {/* 후기 작성 버튼 */}
+                                {(() => {
+                                  const placeId = place.place_info?.place_id || place.place_id;
+                                  const permission = reviewPermissions[placeId];
+                                  
+                                  if (!permission) {
+                                    return (
+                                      <Button
+                                        disabled
+                                        className="group/btn inline-flex items-center gap-2 bg-gray-400 text-white px-6 py-3 rounded-full font-medium opacity-50"
+                                      >
+                                        <Star className="w-4 h-4" />
+                                        권한 확인 중...
+                                      </Button>
+                                    );
+                                  }
+                                  
+                                  if (!permission.can_write) {
+                                    return (
+                                      <Button
+                                        disabled
+                                        className="group/btn inline-flex items-center gap-2 bg-gray-400 text-white px-6 py-3 rounded-full font-medium opacity-50"
+                                        title={permission.reason}
+                                      >
+                                        <Star className="w-4 h-4" />
+                                        {permission.reason.includes("이미") ? "후기 작성완료 ✓" : "후기 작성불가"}
+                                      </Button>
+                                    );
+                                  }
+                                  
+                                  return (
+                                    <Button
+                                      onClick={() => setReviewModal({
+                                        isOpen: true,
+                                        placeId: place.place_info?.place_id || place.place_id,
+                                        placeName: place.place_info?.name || place.name,
+                                      })}
+                                      className="group/btn inline-flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-6 py-3 rounded-full font-medium transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                                    >
+                                      <Star className="w-4 h-4 group-hover/btn:rotate-12 transition-transform duration-300" />
+                                      후기 작성하기
+                                    </Button>
+                                  );
+                                })()}
                               </div>
                             </div>
                           </div>
@@ -454,6 +540,33 @@ export default function CourseDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* 후기 작성 모달 */}
+      {reviewModal.isOpen && (
+        <ReviewModal
+          isOpen={reviewModal.isOpen}
+          onClose={() => setReviewModal(prev => ({ ...prev, isOpen: false }))}
+          placeId={reviewModal.placeId}
+          placeName={reviewModal.placeName}
+          courseId={Number(courseId)}
+          onSuccess={async () => {
+            // 후기 작성 완료 후 권한 상태 업데이트
+            const token = TokenStorage.get();
+            if (token) {
+              try {
+                const { checkReviewPermission } = await import("@/lib/reviews-api");
+                const permission = await checkReviewPermission(reviewModal.placeId, Number(courseId), token);
+                setReviewPermissions(prev => ({
+                  ...prev,
+                  [reviewModal.placeId]: permission
+                }));
+              } catch (err) {
+                console.error("권한 재확인 실패:", err);
+              }
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

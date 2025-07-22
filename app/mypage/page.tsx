@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { User, Edit, Heart, HelpCircle, LogOut, ChevronRight, Trash2, Wallet, CreditCard, Sparkles, Users, Star, Gift, ArrowRight } from "lucide-react"
+import { User, Edit, Heart, HelpCircle, LogOut, ChevronRight, Trash2, Wallet, CreditCard, Sparkles, Users, Star, Gift, ArrowRight, FileText } from "lucide-react"
 import { useEffect, useState } from "react"
 import { UserStorage, TokenStorage, clearAuthStorage } from "@/lib/storage"
 import { useRouter } from "next/navigation"
@@ -408,6 +408,18 @@ export default function MyPage() {
             <div className="h-2 md:h-3 bg-gradient-to-r from-gray-400 via-slate-500 to-gray-600 rounded-t-2xl md:rounded-t-3xl"></div>
             <CardContent className="p-0">
               <div className="divide-y divide-gray-100">
+                <Button asChild variant="ghost" className="w-full justify-between h-16 md:h-20 px-6 md:px-8 hover:bg-gradient-to-r hover:from-amber-50 hover:to-orange-50 transition-all duration-300 rounded-none">
+                  <Link href="/my-reviews">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center shadow-lg">
+                        <FileText className="w-5 h-5 md:w-6 md:h-6 text-white" />
+                      </div>
+                      <span className="text-base md:text-lg font-medium">내 후기 관리</span>
+                    </div>
+                    <ArrowRight className="h-5 w-5 md:h-6 md:w-6 text-gray-400" />
+                  </Link>
+                </Button>
+
                 <Button asChild variant="ghost" className="w-full justify-between h-16 md:h-20 px-6 md:px-8 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 transition-all duration-300 rounded-none">
                   <Link href="/mypage/faq">
                     <div className="flex items-center gap-4">

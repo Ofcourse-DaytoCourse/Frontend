@@ -182,3 +182,19 @@ export const writeComment = (params: CommentCreateRequest, token: string): Promi
 // 22. 댓글 삭제
 export const deleteComment = (params: Comment, token: string): Promise<{ status: string; comment: Comment }> =>
   api("/comments/delete", "DELETE", params, token);
+
+// 23. 후기 작성
+export const createReview = (reviewData: any, token: string): Promise<any> =>
+  api("/reviews/", "POST", reviewData, token);
+
+// 24. 내가 쓴 후기 조회
+export const getMyReviews = (token: string, skip: number = 0, limit: number = 20): Promise<any[]> =>
+  api(`/reviews/my?skip=${skip}&limit=${limit}`, "GET", undefined, token);
+
+// 25. 후기 삭제
+export const deleteReview = (reviewId: number, token: string): Promise<any> =>
+  api(`/reviews/${reviewId}`, "DELETE", undefined, token);
+
+// 26. 후기 수정
+export const updateReview = (reviewId: number, reviewData: any, token: string): Promise<any> =>
+  api(`/reviews/${reviewId}`, "PUT", reviewData, token);

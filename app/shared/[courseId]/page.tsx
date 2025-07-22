@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Send, Heart, MapPin, Phone, MessageCircle, User, Sparkles, Star, Calendar, Clock, Gift, ArrowLeft, Navigation } from "lucide-react";
 import { UserStorage, TokenStorage } from "@/lib/storage";
+import { ReviewModal } from "@/components/ReviewModal";
 
 export default function SharedCoursePage() {
   const { courseId } = useParams();
@@ -17,6 +18,11 @@ export default function SharedCoursePage() {
   const [newComment, setNewComment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
+  const [reviewModal, setReviewModal] = useState({
+    isOpen: false,
+    placeId: "",
+    placeName: "",
+  });
 
   useEffect(() => {
     const userData = UserStorage.get();
@@ -337,6 +343,21 @@ export default function SharedCoursePage() {
                                   {place.phone}
                                 </a>
                               )}
+                              
+                              {/* 후기 작성 버튼 - 로그인한 사용자만 */}
+                              {user && (
+                                <Button
+                                  onClick={() => setReviewModal({
+                                    isOpen: true,
+                                    placeId: place.place_info?.place_id || place.place_id,
+                                    placeName: place.place_info?.name || place.name,
+                                  })}
+                                  className="group/btn inline-flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-6 py-3 rounded-full font-medium transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                                >
+                                  <Star className="w-4 h-4 group-hover/btn:rotate-12 transition-transform duration-300" />
+                                  후기 작성하기
+                                </Button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -461,6 +482,21 @@ export default function SharedCoursePage() {
           </Card>
         </div>
       </div>
+
+      {/* 후기 작성 모달 */}
+      {reviewModal.isOpen && user && (
+        <ReviewModal
+          isOpen={reviewModal.isOpen}
+          onClose={() => setReviewModal(prev => ({ ...prev, isOpen: false }))}
+          placeId={reviewModal.placeId}
+          placeName={reviewModal.placeName}
+          courseId={Number(courseId)}
+          onSuccess={() => {
+            // 필요시 페이지 새로고침 또는 상태 업데이트
+            console.log("후기 작성 완료!");
+          }}
+        />
+      )}
     </div>
   );
 }

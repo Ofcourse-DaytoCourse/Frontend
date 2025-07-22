@@ -42,12 +42,12 @@ export default function KakaoCallbackPage() {
         // 스토리지와 앱의 전역 상태를 함께 업데이트
         setAuthData(response.accessToken, userData);
 
-        // 신규 사용자면 회원가입 페이지로, 기존 사용자면 메인으로
+        // 신규 사용자면 회원가입 페이지로, 기존 사용자면 메인 페이지로
         // setTimeout을 사용해 React가 상태를 업데이트할 시간을 확보한 후 페이지 이동
         if (response.is_new_user) {
           setTimeout(() => router.push("/signup"), 0);
         } else {
-          setTimeout(() => router.push("/course"), 0);
+          setTimeout(() => router.push("/"), 0); // 메인 페이지로 변경
         }
         
       } catch (err: any) {

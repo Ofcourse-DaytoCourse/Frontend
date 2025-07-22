@@ -70,7 +70,7 @@ export default function SignupPage() {
 
       
       alert("닉네임 설정이 완료되었습니다!");
-      router.push("/course");
+      router.push("/"); // 메인 페이지로 변경
     } catch (err: any) {
       alert("닉네임 설정 실패: " + err.message);
     }

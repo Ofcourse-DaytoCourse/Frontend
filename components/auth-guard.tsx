@@ -33,7 +33,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         // 로그인 되어 있는데 /login 접속 시
         if (pathname === "/login") {
           if (user.nickname) {
-            router.replace("/course");
+            router.replace("/"); // 메인 페이지로 리다이렉트
             return;
           } else {
             router.replace("/signup");
@@ -59,17 +59,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // ✅ 닉네임 있음 + /signup에 들어옴 → course로
+    // ✅ 닉네임 있음 + /signup에 들어옴 → 메인 페이지로
     if (user.nickname && pathname === "/signup") {
-      router.replace("/course");
+      router.replace("/");
       return;
     }
 
-    // ✅ 홈 리디렉션
-    if (pathname === "/") {
-      router.replace("/course");
-      return;
-    }
+    // ✅ 홈 페이지는 메인 페이지로 사용 (리다이렉트 제거)
 
     setAuthState("authenticated");
   }, [pathname, isAuthLoading, router]);

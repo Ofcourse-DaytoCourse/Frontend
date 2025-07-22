@@ -6,16 +6,99 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Heart, MapPin, Sparkles, Users, Calendar, ArrowRight, Star, Gift, Zap, PlusCircle, List } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Heart, MapPin, Sparkles, Users, Calendar, ArrowRight, Star, Gift, Zap, PlusCircle, List, Wallet, TrendingUp, Clock, FileText } from "lucide-react";
 import { TokenStorage, UserStorage } from "@/lib/storage";
+import { getMyProfile, getCourses } from "@/lib/api";
+import { paymentsApi } from "@/lib/payments-api";
+import type { User } from "@/types/api";
+
+interface DashboardData {
+  currentBalance: number;
+  monthlyUsage: number;
+  savedCourses: number;
+  user: User | null;
+}
 
 export default function HomePage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState<DashboardData>({
+    currentBalance: 0,
+    monthlyUsage: 0,
+    savedCourses: 0,
+    user: null
+  });
+  const [dataLoading, setDataLoading] = useState(false);
+  const [dataError, setDataError] = useState<string | null>(null);
+
+  // 대시보드 데이터 로드 함수
+  const loadDashboardData = async (token: string, userId: string) => {
+    try {
+      setDataLoading(true);
+      setDataError(null);
+
+      // 병렬로 API 호출
+      const [balanceRes, coursesRes, profileRes, historyRes] = await Promise.allSettled([
+        paymentsApi.getBalanceSummary(token),
+        getCourses(parseInt(userId), token),
+        getMyProfile(userId, token),
+        paymentsApi.getPaymentHistory({ page: 1, size: 50, history_type: 'usage' }, token)
+      ]);
+
+      const newData: DashboardData = {
+        currentBalance: 0,
+        monthlyUsage: 0,
+        savedCourses: 0,
+        user: null
+      };
+
+      // 잔액 정보
+      if (balanceRes.status === 'fulfilled') {
+        newData.currentBalance = balanceRes.value.total_balance;
+      }
+
+      // 코스 개수
+      if (coursesRes.status === 'fulfilled') {
+        console.log('Courses API result:', coursesRes.value);
+        newData.savedCourses = coursesRes.value.courses?.length || 0;
+      } else {
+        console.error('Courses API failed:', coursesRes.reason);
+      }
+
+      // 사용자 정보
+      if (profileRes.status === 'fulfilled') {
+        newData.user = profileRes.value.user;
+      }
+
+      // 이번 달 사용량 계산
+      if (historyRes.status === 'fulfilled') {
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+        
+        const monthlyUsage = historyRes.value.usage_histories?.reduce((total, history) => {
+          const historyDate = new Date(history.created_at);
+          if (historyDate.getMonth() === currentMonth && historyDate.getFullYear() === currentYear) {
+            return total + history.amount;
+          }
+          return total;
+        }, 0) || 0;
+        
+        newData.monthlyUsage = monthlyUsage;
+      }
+
+      setDashboardData(newData);
+    } catch (error) {
+      setDataError("대시보드 정보를 불러오는 중 오류가 발생했습니다.");
+      console.error("Dashboard data loading error:", error);
+    } finally {
+      setDataLoading(false);
+    }
+  };
 
   useEffect(() => {
     // AuthGuard에서 모든 리다이렉트를 처리
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       const token = TokenStorage.get();
       const user = UserStorage.get();
       
@@ -26,6 +109,9 @@ export default function HomePage() {
       
       // 로그인된 사용자는 메인 페이지 표시
       setIsLoading(false);
+      
+      // 대시보드 데이터 로드
+      await loadDashboardData(token, user.user_id.toString());
     }, 1000);
 
     return () => clearTimeout(timer);
@@ -88,148 +174,249 @@ export default function HomePage() {
       {/* 메인 컨텐츠 */}
       <div className="relative">
         <div className="container mx-auto px-4 py-16">
-          {/* 헤더 섹션 */}
-          <div className="text-center space-y-8 mb-16">
-            {/* 로고 영역 */}
-            <div className="flex items-center justify-center space-x-4 mb-8">
-              <div className="w-20 h-20 bg-gradient-to-br from-rose-400 to-pink-500 rounded-3xl flex items-center justify-center shadow-2xl transform rotate-12 hover:rotate-0 transition-transform duration-500">
-                <Heart className="w-10 h-10 text-white" />
-              </div>
-              <div className="w-20 h-20 bg-gradient-to-br from-purple-400 to-pink-500 rounded-3xl flex items-center justify-center shadow-2xl transform -rotate-12 hover:rotate-0 transition-transform duration-500">
-                <Users className="w-10 h-10 text-white" />
-              </div>
-            </div>
-            
-            {/* 메인 타이틀 */}
-            <div className="space-y-6">
-              <h1 className="text-6xl md:text-8xl font-black mb-6">
-                <span className="bg-gradient-to-r from-rose-600 via-pink-600 to-purple-600 bg-clip-text text-transparent">
-                  특별한 데이트
-                </span>
-                <br />
-                <span className="bg-gradient-to-r from-pink-500 via-rose-500 to-purple-500 bg-clip-text text-transparent">
-                  코스 추천 💕
-                </span>
-              </h1>
-              
-              <p className="text-xl md:text-2xl text-gray-600 max-w-4xl mx-auto leading-relaxed">
-                AI가 두 분만을 위한 완벽한 데이트 코스를 추천해드립니다
-                <br />
-                <span className="text-rose-500 font-semibold">Love is in the details ✨</span>
-              </p>
-              
-              {/* 데코레이션 */}
-              <div className="flex items-center justify-center space-x-4 pt-6">
-                <div className="flex space-x-1">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-6 h-6 text-yellow-400 fill-current animate-pulse" style={{animationDelay: `${i * 0.2}s`}} />
-                  ))}
-                </div>
-                <Sparkles className="w-8 h-8 text-pink-500 animate-spin" />
-                <div className="flex space-x-1">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-6 h-6 text-yellow-400 fill-current animate-pulse" style={{animationDelay: `${i * 0.2}s`}} />
-                  ))}
-                </div>
-              </div>
-            </div>
+          {/* 헤더 */}
+          <div className="text-center mb-12">
+            <h1 className="text-4xl md:text-5xl font-bold mb-4">
+              <span className="bg-gradient-to-r from-rose-600 to-pink-600 bg-clip-text text-transparent">
+                {!isLoading && dashboardData.user?.nickname ? `${dashboardData.user.nickname}님의 ` : ""}데이트 코스 추천
+              </span>
+            </h1>
+            <p className="text-lg text-gray-600">
+              AI가 맞춤형 데이트 코스를 추천해드립니다 ✨
+            </p>
           </div>
 
-          {/* CTA 버튼들 */}
-          <div className="flex flex-col md:flex-row gap-6 justify-center items-center mb-20">
-            <Button
+          {/* 메인 메뉴 카드들 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-20 max-w-7xl mx-auto">
+            {/* AI 코스 추천 카드 */}
+            <Card 
+              className="bg-gradient-to-br from-rose-50 to-pink-50 border-rose-200 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 cursor-pointer group"
               onClick={() => router.push("/course")}
-              className="bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white px-12 py-6 text-xl rounded-full shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:scale-105"
             >
-              <PlusCircle className="w-7 h-7 mr-3" />
-              새 코스 만들기
-              <Sparkles className="w-6 h-6 ml-3" />
-            </Button>
-            
-            <Button
-              variant="outline"
-              onClick={() => router.push("/list")}
-              className="border-3 border-pink-300 text-pink-600 hover:bg-pink-50 px-12 py-6 text-xl rounded-full shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105"
-            >
-              <List className="w-6 h-6 mr-3" />
-              내 코스 보기
-              <ArrowRight className="w-5 h-5 ml-3" />
-            </Button>
-          </div>
-
-          {/* 피처 카드들 */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-            {[
-              {
-                icon: Heart,
-                title: "AI 맞춤 추천",
-                description: "MBTI, 취향, 예산을 분석해 완벽한 코스를 추천",
-                gradient: "from-rose-400 to-pink-500",
-                bg: "from-rose-50 to-pink-50",
-                border: "border-rose-200"
-              },
-              {
-                icon: Users,
-                title: "연인과 공유",
-                description: "만든 코스를 연인과 함께 공유하고 추억 만들기",
-                gradient: "from-purple-400 to-rose-500",
-                bg: "from-purple-50 to-rose-50",
-                border: "border-purple-200"
-              },
-              {
-                icon: MapPin,
-                title: "실시간 장소 정보",
-                description: "카카오맵 연동으로 정확한 위치와 상세 정보 제공",
-                gradient: "from-pink-400 to-purple-500",
-                bg: "from-pink-50 to-purple-50",
-                border: "border-pink-200"
-              }
-            ].map((feature, index) => (
-              <Card key={index} className={`bg-gradient-to-br ${feature.bg} rounded-3xl shadow-2xl ${feature.border} border-2 backdrop-blur-lg hover:shadow-3xl transition-all duration-500 transform hover:scale-105 hover:-translate-y-2`}>
-                <CardHeader className="pb-6 pt-10">
-                  <div className="flex justify-center mb-6">
-                    <div className={`w-20 h-20 bg-gradient-to-br ${feature.gradient} rounded-3xl flex items-center justify-center shadow-xl`}>
-                      <feature.icon className="w-10 h-10 text-white" />
-                    </div>
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-14 h-14 bg-gradient-to-br from-rose-400 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <Heart className="w-7 h-7 text-white" />
                   </div>
-                  <CardTitle className="text-2xl font-bold text-gray-800 text-center mb-4">
-                    {feature.title}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pb-10">
-                  <CardDescription className="text-gray-600 text-center text-lg leading-relaxed">
-                    {feature.description}
-                  </CardDescription>
-                </CardContent>
-              </Card>
-            ))}
+                  <Badge className="bg-rose-500 text-white px-3 py-1 text-sm font-semibold shadow-md">
+                    1,000원
+                  </Badge>
+                </div>
+                <CardTitle className="text-xl font-bold text-gray-800 group-hover:text-rose-600 transition-colors duration-300">
+                  AI 코스 추천
+                </CardTitle>
+                <CardDescription className="text-gray-600 leading-relaxed">
+                  맞춤형 데이트 코스를 AI가 추천해드립니다
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center text-rose-500 font-medium group-hover:translate-x-2 transition-transform duration-300">
+                  <span>시작하기</span>
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 내 코스 관리 카드 */}
+            <Card 
+              className="bg-gradient-to-br from-purple-50 to-rose-50 border-purple-200 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 cursor-pointer group"
+              onClick={() => router.push("/list")}
+            >
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-14 h-14 bg-gradient-to-br from-purple-400 to-rose-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <List className="w-7 h-7 text-white" />
+                  </div>
+                </div>
+                <CardTitle className="text-xl font-bold text-gray-800 group-hover:text-purple-600 transition-colors duration-300">
+                  내 코스 관리
+                </CardTitle>
+                <CardDescription className="text-gray-600 leading-relaxed">
+                  저장된 코스를 확인하고 관리하세요
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center text-purple-500 font-medium group-hover:translate-x-2 transition-transform duration-300">
+                  <span>확인하기</span>
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 공유된 코스 카드 */}
+            <Card 
+              className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 cursor-pointer group"
+              onClick={() => router.push("/shared")}
+            >
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-14 h-14 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <Gift className="w-7 h-7 text-white" />
+                  </div>
+                </div>
+                <CardTitle className="text-xl font-bold text-gray-800 group-hover:text-blue-600 transition-colors duration-300">
+                  공유된 코스
+                </CardTitle>
+                <CardDescription className="text-gray-600 leading-relaxed">
+                  다른 사용자들의 데이트 코스를 둘러보세요
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center text-blue-500 font-medium group-hover:translate-x-2 transition-transform duration-300">
+                  <span>구경하기</span>
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 인기 장소 둘러보기 카드 */}
+            <Card 
+              className="bg-gradient-to-br from-teal-50 to-cyan-50 border-teal-200 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 cursor-pointer group"
+              onClick={() => router.push("/places")}
+            >
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-14 h-14 bg-gradient-to-br from-teal-400 to-cyan-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <MapPin className="w-7 h-7 text-white" />
+                  </div>
+                  <Badge className="bg-teal-500 text-white px-3 py-1 text-sm font-semibold shadow-md">
+                    NEW
+                  </Badge>
+                </div>
+                <CardTitle className="text-xl font-bold text-gray-800 group-hover:text-teal-600 transition-colors duration-300">
+                  인기 장소 둘러보기
+                </CardTitle>
+                <CardDescription className="text-gray-600 leading-relaxed">
+                  다른 사용자들이 추천하는 핫플을 확인하세요
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center text-teal-500 font-medium group-hover:translate-x-2 transition-transform duration-300">
+                  <span>탐색하기</span>
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 내 후기 관리 카드 */}
+            <Card 
+              className="bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 cursor-pointer group"
+              onClick={() => router.push("/my-reviews")}
+            >
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-14 h-14 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <FileText className="w-7 h-7 text-white" />
+                  </div>
+                </div>
+                <CardTitle className="text-xl font-bold text-gray-800 group-hover:text-amber-600 transition-colors duration-300">
+                  내 후기 관리
+                </CardTitle>
+                <CardDescription className="text-gray-600 leading-relaxed">
+                  작성한 후기를 확인하고 관리하세요
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center text-amber-500 font-medium group-hover:translate-x-2 transition-transform duration-300">
+                  <span>확인하기</span>
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 마이페이지 카드 */}
+            <Card 
+              className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 cursor-pointer group"
+              onClick={() => router.push("/mypage")}
+            >
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-14 h-14 bg-gradient-to-br from-green-400 to-emerald-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <Users className="w-7 h-7 text-white" />
+                  </div>
+                </div>
+                <CardTitle className="text-xl font-bold text-gray-800 group-hover:text-green-600 transition-colors duration-300">
+                  마이페이지
+                </CardTitle>
+                <CardDescription className="text-gray-600 leading-relaxed">
+                  프로필 및 계정 설정을 관리하세요
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center text-green-500 font-medium group-hover:translate-x-2 transition-transform duration-300">
+                  <span>설정하기</span>
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
-          {/* 하단 섹션 */}
-          <div className="text-center pt-20">
-            <div className="space-y-8">
-              <div className="max-w-2xl mx-auto">
-                <h3 className="text-4xl font-bold text-gray-800 mb-6">
-                  완벽한 데이트를 위한 첫 걸음 💝
-                </h3>
-                <p className="text-xl text-gray-600 leading-relaxed">
-                  지금 바로 시작해서 두 분만의 특별한 추억을 만들어보세요!
-                </p>
+          {/* 크레딧 관리 섹션 */}
+          <div className="bg-gradient-to-br from-pink-50 to-purple-50 rounded-2xl p-8 max-w-4xl mx-auto">
+            <h3 className="text-2xl font-bold text-gray-800 mb-6 text-center">크레딧 관리</h3>
+            
+            {/* 잔액 및 사용량 정보 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              {/* 현재 잔액 */}
+              <div className="bg-white rounded-xl p-6 shadow-md">
+                <div className="flex items-center space-x-3 mb-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-rose-400 to-pink-500 rounded-lg flex items-center justify-center">
+                    <Wallet className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-800">현재 잔액</h4>
+                    <p className="text-sm text-gray-600">사용 가능한 크레딧</p>
+                  </div>
+                </div>
+                {dataLoading ? (
+                  <Skeleton className="h-8 w-24" />
+                ) : dataError ? (
+                  <p className="text-rose-500 text-sm">로딩 오류</p>
+                ) : (
+                  <div className="flex items-baseline space-x-2">
+                    <span className="text-2xl font-bold text-rose-600">
+                      {dashboardData.currentBalance.toLocaleString()}
+                    </span>
+                    <span className="text-gray-500">원</span>
+                  </div>
+                )}
               </div>
-              
+
+              {/* 이번 달 사용량 */}
+              <div className="bg-white rounded-xl p-6 shadow-md">
+                <div className="flex items-center space-x-3 mb-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-pink-400 to-purple-500 rounded-lg flex items-center justify-center">
+                    <TrendingUp className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-800">이번 달 사용량</h4>
+                    <p className="text-sm text-gray-600">크레딧 사용 내역</p>
+                  </div>
+                </div>
+                {dataLoading ? (
+                  <Skeleton className="h-8 w-20" />
+                ) : dataError ? (
+                  <p className="text-pink-500 text-sm">로딩 오류</p>
+                ) : (
+                  <div className="flex items-baseline space-x-2">
+                    <span className="text-2xl font-bold text-pink-600">
+                      {dashboardData.monthlyUsage.toLocaleString()}
+                    </span>
+                    <span className="text-gray-500">원</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 관리 버튼 */}
+            <div className="text-center">
               <Button
-                onClick={() => router.push("/shared")}
-                variant="outline"
-                className="border-3 border-purple-300 text-purple-600 hover:bg-purple-50 px-10 py-4 text-lg rounded-full shadow-lg hover:shadow-xl transition-all duration-300"
+                onClick={() => router.push("/payments/dashboard")}
+                className="bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white px-8 py-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-300"
               >
-                <Gift className="w-6 h-6 mr-3" />
-                공유된 코스 구경하기
-                <Sparkles className="w-5 h-5 ml-3" />
+                <Wallet className="w-5 h-5 mr-2" />
+                자세한 크레딧 관리
               </Button>
-              
-              <p className="text-gray-500 text-sm animate-pulse">
-                사랑은 세상에서 가장 아름다운 모험입니다 💕✨
-              </p>
             </div>
           </div>
         </div>
