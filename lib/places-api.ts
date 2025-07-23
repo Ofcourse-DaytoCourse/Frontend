@@ -2,6 +2,20 @@ import { api } from './api';
 import type { PlaceListResponse, Place, PlaceCategory, PlaceSearchParams, PlaceFilters } from '@/types/places';
 import { ReviewResponse } from './reviews-api';
 
+// AI 검색 관련 타입 정의
+export interface AISearchRequest {
+  description: string;
+  district: string;
+  category?: string;
+}
+
+export interface AISearchResponse {
+  places: Place[];
+  cost: number;
+  search_time: number;
+  total_results: number;
+}
+
 // 장소 목록 조회
 export const getPlaces = async (params: PlaceSearchParams = {}): Promise<PlaceListResponse> => {
   const searchParams = new URLSearchParams();
@@ -73,4 +87,14 @@ export const getPlacesByRegion = async (
   limit: number = 20
 ): Promise<PlaceListResponse> => {
   return getPlaces({ region, skip, limit });
+};
+
+// AI 장소 검색
+export const aiSearchPlaces = async (params: AISearchRequest, token: string): Promise<AISearchResponse> => {
+  return api("/places/ai-search", "POST", params, token);
+};
+
+// 사용자 잔액 조회 (AI 검색 비용 확인용)  
+export const getUserBalance = async (token: string): Promise<{ balance: number }> => {
+  return api("/api/v1/payments/balance", "GET", undefined, token);
 };

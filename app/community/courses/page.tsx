@@ -31,7 +31,7 @@ export default function CommunityCoursesPage() {
   const router = useRouter();
   const [courses, setCourses] = useState<SharedCourse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sortBy, setSortBy] = useState('latest');
+  const [sortBy, setSortBy] = useState('purchase_count_desc');
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
@@ -141,10 +141,10 @@ export default function CommunityCoursesPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="purchase_count_desc">구매 많은 순</SelectItem>
+                <SelectItem value="rating">평점 높은 순</SelectItem>
+                <SelectItem value="popular">조회 많은 순</SelectItem>
                 <SelectItem value="latest">최신순</SelectItem>
-                <SelectItem value="popular">인기순</SelectItem>
-                <SelectItem value="rating">평점순</SelectItem>
-                <SelectItem value="purchases">구매순</SelectItem>
               </SelectContent>
             </Select>
           </div>

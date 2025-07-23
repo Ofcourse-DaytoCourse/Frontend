@@ -47,8 +47,10 @@ export async function api(
         errorMessage = `HTTP ${res.status}: ${res.statusText}`;
       }
       
-      // 인증 오류 처리
-      if (res.status === 401) {
+      // 상태코드별 에러 처리 - 400은 백엔드 메시지 그대로 사용
+      if (res.status === 400) {
+        // 400 에러는 백엔드에서 보낸 detail 메시지를 그대로 사용 (이미 위에서 설정됨)
+      } else if (res.status === 401) {
         errorMessage = '인증이 만료되었습니다. 다시 로그인해주세요.';
         // 토큰 제거 및 로그인 페이지로 리디렉션은 호출하는 곳에서 처리
       } else if (res.status === 403) {
@@ -225,3 +227,24 @@ export const purchaseCourse = (courseId: number, token: string): Promise<any> =>
 // 31. 구매한 코스 저장하기
 export const savePurchasedCourse = (courseId: number, token: string): Promise<any> =>
   api(`/shared_courses/${courseId}/save`, "POST", undefined, token);
+
+// 31-1. 구매자 후기 작성
+export const createCourseBuyerReview = (reviewData: any, token: string): Promise<any> =>
+  api("/shared_courses/reviews/buyer", "POST", reviewData, token);
+
+// 32. 내가 작성한 커뮤니티 코스 후기 조회
+export const getMyCourseReviews = (token: string, skip: number = 0, limit: number = 20): Promise<any> => {
+  const queryParams = new URLSearchParams();
+  queryParams.append('skip', skip.toString());
+  queryParams.append('limit', limit.toString());
+  
+  return api(`/shared_courses/reviews/buyer/my?${queryParams.toString()}`, "GET", undefined, token);
+};
+
+// 33. 커뮤니티 코스 후기 수정
+export const updateCourseReview = (reviewId: number, reviewData: any, token: string): Promise<any> =>
+  api(`/shared_courses/reviews/buyer/${reviewId}`, "PUT", reviewData, token);
+
+// 34. 커뮤니티 코스 후기 삭제
+export const deleteCourseReview = (reviewId: number, token: string): Promise<any> =>
+  api(`/shared_courses/reviews/buyer/${reviewId}`, "DELETE", undefined, token);

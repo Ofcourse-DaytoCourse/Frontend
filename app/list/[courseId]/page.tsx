@@ -689,6 +689,7 @@ function CourseReviewModal({
   const [reviewText, setReviewText] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [agreedToAll, setAgreedToAll] = useState(false);
 
   const predefinedTags = [
     '완벽해요', '추천해요', '로맨틱해요', '재미있어요', '힐링돼요',
@@ -698,6 +699,11 @@ function CourseReviewModal({
   const handleSubmit = async () => {
     if (reviewText.trim().length < 15) {
       alert('후기는 최소 15자 이상 작성해주세요.');
+      return;
+    }
+
+    if (!agreedToAll) {
+      alert('후기 작성 전 확인사항에 동의해주세요.');
       return;
     }
 
@@ -715,9 +721,22 @@ function CourseReviewModal({
 
       await api('/shared_courses/reviews/buyer', 'POST', reviewData, token);
       onSuccess();
-    } catch (error) {
+    } catch (error: any) {
       console.error('후기 작성 실패:', error);
-      alert('후기 작성에 실패했습니다. 다시 시도해주세요.');
+      
+      // 백엔드에서 보내는 상세한 에러 메시지 표시 (공유 코스와 동일한 처리)
+      if (error.message?.includes('후기 작성이 거부되었습니다')) {
+        // GPT 검증 실패 메시지 처리
+        alert(`구매 후기 작성 실패: ${error.message}`);
+      } else if (error.message?.includes('1분 내에 이미 부적절한')) {
+        // Rate Limit 메시지 처리
+        alert(`구매 후기 작성 실패: ${error.message}`);
+      } else if (error.message?.includes('이미 후기를 작성')) {
+        alert('이미 후기를 작성하셨습니다.');
+      } else {
+        // 기타 에러는 백엔드 메시지 그대로 표시하되, 없으면 기본 메시지
+        alert(`구매 후기 작성 실패: ${error.message || '후기 작성에 실패했습니다. 다시 시도해주세요.'}`);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -798,6 +817,29 @@ function CourseReviewModal({
             </div>
           </div>
 
+          {/* 후기 작성 전 확인사항 체크 */}
+          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <h3 className="font-medium text-amber-800 mb-3">⚠️ 후기 작성 전 확인사항</h3>
+            <div className="text-sm text-amber-700 space-y-2 mb-4">
+              <p>• 작성된 후기는 <span className="font-semibold">수정 및 삭제가 불가능</span>합니다</p>
+              <p>• 작성한 후기가 홍보 목적으로 사용될 수 있습니다</p>
+              <p>• 부적절한 내용의 후기는 AI가 자동으로 차단할 수 있습니다</p>
+            </div>
+            
+            <div className="flex items-start space-x-3">
+              <input
+                type="checkbox"
+                id="agree-all"
+                checked={agreedToAll}
+                onChange={(e) => setAgreedToAll(e.target.checked)}
+                className="mt-1"
+              />
+              <label htmlFor="agree-all" className="text-sm text-amber-800 font-medium cursor-pointer">
+                위 모든 사항을 확인했으며 동의합니다
+              </label>
+            </div>
+          </div>
+
           {/* 버튼 */}
           <div className="flex gap-3">
             <Button
@@ -811,7 +853,7 @@ function CourseReviewModal({
             <Button
               onClick={handleSubmit}
               className="flex-1 bg-yellow-500 hover:bg-yellow-600"
-              disabled={isSubmitting || reviewText.trim().length < 15}
+              disabled={isSubmitting || reviewText.trim().length < 15 || !agreedToAll}
             >
               {isSubmitting ? '작성 중...' : '후기 작성'}
             </Button>

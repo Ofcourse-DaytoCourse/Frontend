@@ -19,9 +19,14 @@ import {
   Heart,
   Loader2
 } from "lucide-react";
-import { getPlaces, getPlaceCategories, searchPlaces, getPlaceReviews } from "@/lib/places-api";
+import { getPlaces, getPlaceCategories, searchPlaces, getPlaceReviews, aiSearchPlaces } from "@/lib/places-api";
+import { paymentsApi } from "@/lib/payments-api";
 import type { Place, PlaceCategory, PlaceFilters } from "@/types/places";
 import { SEOUL_DISTRICTS } from "@/types/places";
+import type { AISearchRequest, AISearchResponse } from "@/lib/places-api";
+import { toast } from "sonner";
+import { useBalanceData } from "@/hooks/use-balance-data";
+import { TokenStorage } from "@/lib/storage";
 
 export default function PlacesPage() {
   const router = useRouter();
@@ -36,7 +41,12 @@ export default function PlacesPage() {
       try {
         const savedFilters = localStorage.getItem('places-filters');
         if (savedFilters) {
-          return JSON.parse(savedFilters);
+          const parsed = JSON.parse(savedFilters);
+          // 기존 설정이 있어도 sortBy는 강제로 review_count_desc로 설정
+          return {
+            ...parsed,
+            sortBy: 'review_count_desc'
+          };
         }
       } catch (error) {
         console.error('필터 상태 로드 실패:', error);
@@ -46,7 +56,7 @@ export default function PlacesPage() {
       category: 'all',
       region: 'all', 
       search: '',
-      sortBy: 'name',
+      sortBy: 'review_count_desc',
       minRating: 0,
       hasParking: false,
       hasPhone: false
@@ -79,6 +89,42 @@ export default function PlacesPage() {
   const [hasMore, setHasMore] = useState(true);
   const [pagination, setPagination] = useState({ page: 1, limit: 20 });
   const [totalCount, setTotalCount] = useState(0);
+
+  // AI 검색 관련 상태 (localStorage에서 초기값 복원)
+  const [aiSearchResults, setAiSearchResults] = useState<Place[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('ai-search-results');
+        return saved ? JSON.parse(saved) : [];
+      } catch { return []; }
+    }
+    return [];
+  });
+  const [isAiSearching, setIsAiSearching] = useState(false);
+  const [showAiResults, setShowAiResults] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('show-ai-results') === 'true';
+    }
+    return false;
+  });
+  const [aiSearchError, setAiSearchError] = useState<string | null>(null);
+  const [aiSearchForm, setAiSearchForm] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('ai-search-form');
+        return saved ? JSON.parse(saved) : { description: '', district: '', category: '전체' };
+      } catch { return { description: '', district: '', category: '전체' }; }
+    }
+    return { description: '', district: '', category: '전체' };
+  });
+  // 기존 useState 대신 useBalanceData 훅 사용
+  const { balance } = useBalanceData(false);
+
+  // 검색 결과 표시 제어
+  const displayPlaces = showAiResults ? aiSearchResults : places;
+  const searchResultTitle = showAiResults 
+    ? `AI 검색 결과 (${aiSearchResults.length}개)` 
+    : `일반 검색 결과 (${places.length}개)`;
 
   // 컴포넌트 마운트 시 초기 데이터 로드
   useEffect(() => {
@@ -156,6 +202,8 @@ export default function PlacesPage() {
       ]);
       setCategories(categoriesData);
       setPagination(prev => ({ ...prev, page: 1 })); // 초기 로드시 1페이지로
+      
+      // useBalanceData 훅에서 자동으로 잔액을 로드하므로 별도 처리 불필요
       
       // 초기 장소 데이터 로드
       await loadPlaces();
@@ -271,6 +319,74 @@ export default function PlacesPage() {
 
   const handlePlaceClick = (placeId: string) => {
     router.push(`/places/${placeId}`);
+  };
+
+  // AI 검색 폼 검증
+  const isFormValid = 
+    aiSearchForm.description.length >= 20 && 
+    aiSearchForm.description.length <= 200 &&
+    aiSearchForm.district !== '' &&
+    balance && balance.total_balance >= 300;
+
+  const getDescriptionStatus = () => {
+    const length = aiSearchForm.description.length;
+    if (length < 20) return { valid: false, message: `${20 - length}자 더 입력해주세요` };
+    if (length > 200) return { valid: false, message: `${length - 200}자 초과` };
+    return { valid: true, message: `${length}/200자` };
+  };
+
+  // AI 검색 실행
+  const handleAiSearch = async () => {
+    if (!isFormValid) return;
+    
+    setIsAiSearching(true);
+    setAiSearchError(null);
+    
+    try {
+      const token = TokenStorage.get();
+      if (!token) {
+        throw new Error('로그인이 필요합니다');
+      }
+
+      // 1. 먼저 300원 결제 처리
+      const deductResult = await paymentsApi.deductBalance({
+        amount: 300,
+        service_type: 'ai_search',
+        service_id: `ai_place_search_${Date.now()}`,
+        description: 'AI 장소 검색 서비스 이용'
+      }, token);
+
+      if (!deductResult.success) {
+        throw new Error(deductResult.message || '결제 처리 중 오류가 발생했습니다');
+      }
+
+      // 2. 결제 성공 후 AI 검색 실행
+      const result = await aiSearchPlaces(aiSearchForm, token);
+      setAiSearchResults(result.places);
+      setShowAiResults(true);
+      
+      // localStorage에 AI 검색 상태 저장
+      localStorage.setItem('ai-search-results', JSON.stringify(result.places));
+      localStorage.setItem('show-ai-results', 'true');
+      localStorage.setItem('ai-search-form', JSON.stringify(aiSearchForm));
+      
+      // useBalanceData 훅이 자동으로 잔액을 새로고침하므로 별도 처리 불필요
+      
+      // 성공 토스트
+      toast.success(`AI 검색 완료! ${result.places.length}개 장소 발견 (${result.search_time.toFixed(1)}초)`);
+    } catch (error: any) {
+      setAiSearchError(error.message);
+      toast.error(`AI 검색 실패: ${error.message}`);
+    } finally {
+      setIsAiSearching(false);
+    }
+  };
+
+  // 일반 검색 시 AI 결과 숨김
+  const handleNormalSearch = () => {
+    setShowAiResults(false);
+    localStorage.setItem('show-ai-results', 'false');
+    handleSearchSubmit();
   };
 
   // 로딩 스켈레톤
@@ -433,9 +549,9 @@ export default function PlacesPage() {
                 onChange={(e) => setFilters(prev => ({ ...prev, sortBy: e.target.value }))}
                 className="px-4 py-2 bg-white border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <option value="name">이름순</option>
-                <option value="rating_desc">평점 높은 순</option>
                 <option value="review_count_desc">후기 많은 순</option>
+                <option value="rating_desc">평점 높은 순</option>
+                <option value="name">이름순</option>
                 <option value="latest">최신 등록순</option>
               </select>
 
@@ -555,7 +671,7 @@ export default function PlacesPage() {
                       category: 'all',
                       region: 'all',
                       search: '',
-                      sortBy: 'name',
+                      sortBy: 'review_count_desc',
                       minRating: 0,
                       hasParking: false,
                       hasPhone: false
@@ -576,15 +692,138 @@ export default function PlacesPage() {
           </div>
         </div>
 
+        {/* AI 검색 섹션 */}
+        <div className="mb-8 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 border border-blue-100">
+          <div className="mb-4">
+            <h2 className="text-xl font-bold text-gray-900 mb-2 flex items-center gap-2">
+              🤖 AI 스마트 검색
+              <span className="text-sm font-normal text-gray-600">- 자연어로 원하는 장소를 찾아보세요</span>
+            </h2>
+            <p className="text-sm text-gray-600">
+              예: "연인과 함께 가기 좋은 분위기 있는 데이트 카페", "인스타 감성의 브런치가 유명한 맛집"
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {/* 설명 입력 필드 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                찾고 싶은 장소 설명 (20-200자)
+              </label>
+              <textarea
+                value={aiSearchForm.description}
+                onChange={(e) => setAiSearchForm(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="예: 연인과 함께 가기 좋은 분위기 있는 데이트 카페, 인스타그램 감성의 브런치가 유명한 맛집"
+                className="w-full h-20 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                maxLength={200}
+              />
+              <div className="flex justify-between items-center mt-1">
+                <span className={`text-xs ${getDescriptionStatus().valid ? 'text-green-600' : 'text-red-600'}`}>
+                  {getDescriptionStatus().message}
+                </span>
+              </div>
+            </div>
+
+            {/* 구 선택 및 카테고리 선택 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">구 선택 (필수)</label>
+                <select
+                  value={aiSearchForm.district}
+                  onChange={(e) => setAiSearchForm(prev => ({ ...prev, district: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">구 선택</option>
+                  {SEOUL_DISTRICTS.map(district => (
+                    <option key={district} value={district}>{district}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">카테고리 (선택사항)</label>
+                <select
+                  value={aiSearchForm.category}
+                  onChange={(e) => setAiSearchForm(prev => ({ ...prev, category: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="전체">전체</option>
+                  {categories.map(category => (
+                    <option key={category.category_id} value={category.name}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* 검색 버튼 및 잔액 표시 */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Button
+                  onClick={handleAiSearch}
+                  disabled={!isFormValid || isAiSearching}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 disabled:opacity-50"
+                >
+                  {isAiSearching ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      AI가 장소를 찾고 있습니다...
+                    </>
+                  ) : (
+                    <>
+                      🤖 AI 검색 (300원)
+                    </>
+                  )}
+                </Button>
+                
+                <div className="text-sm text-gray-600">
+                  잔액: <span className="font-semibold text-blue-600">
+                    {balance ? balance.total_balance.toLocaleString() : '0'}원
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 에러 메시지 */}
+            {aiSearchError && (
+              <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                <p className="text-red-700 text-sm">{aiSearchError}</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 검색 결과 타입 표시 */}
+        {showAiResults && (
+          <div className="mb-4 flex items-center gap-2">
+            <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+              🤖 AI 검색 결과
+            </Badge>
+            <span className="text-sm text-gray-600">{searchResultTitle}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setShowAiResults(false);
+                localStorage.setItem('show-ai-results', 'false');
+              }}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              일반 검색으로 돌아가기
+            </Button>
+          </div>
+        )}
+
         {/* 장소 목록 */}
-        {places.length === 0 && !loading ? (
+        {displayPlaces.length === 0 && !loading ? (
           <div className="text-center py-16">
             <div className="text-gray-400 text-6xl mb-4">🔍</div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">검색 결과가 없습니다</h3>
             <p className="text-gray-500 mb-6">다른 검색어를 사용하거나 필터를 변경해보세요</p>
             <Button 
               onClick={() => {
-                const resetFilters = { category: 'all', region: 'all', search: '', sortBy: 'name', minRating: 0, hasParking: false, hasPhone: false };
+                const resetFilters = { category: 'all', region: 'all', search: '', sortBy: 'review_count_desc', minRating: 0, hasParking: false, hasPhone: false };
                 setFilters(resetFilters);
                 setSearchInput('');
                 // localStorage에서도 제거
@@ -600,7 +839,7 @@ export default function PlacesPage() {
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-              {places.map((place) => (
+              {displayPlaces.map((place) => (
                 <Card 
                   key={place.place_id} 
                   className="bg-white shadow-sm hover:shadow-lg transition-all duration-300 cursor-pointer border-0 overflow-hidden group"
@@ -674,7 +913,7 @@ export default function PlacesPage() {
             </div>
 
             {/* 페이지네이션 */}
-            {totalCount > pagination.limit && (
+            {!showAiResults && totalCount > pagination.limit && (
               <div className="flex justify-center items-center space-x-2 mt-8">
                 <Button
                   variant="outline"

@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Rating } from "@/components/ui/rating";
+import { Checkbox } from "@/components/ui/checkbox";
 import { createReview, ReviewCreateRequest } from "@/lib/reviews-api";
 import { updateReview } from "@/lib/api";
 import { TokenStorage } from "@/lib/storage";
@@ -38,6 +39,7 @@ export function ReviewModal({
   const [reviewText, setReviewText] = useState(editMode && existingReview ? existingReview.review_text || "" : "");
   const [textError, setTextError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [agreementChecked, setAgreementChecked] = useState(false);
 
   const handleTextChange = (text: string) => {
     setReviewText(text);
@@ -54,6 +56,11 @@ export function ReviewModal({
     // 검증
     if (reviewText.trim().length > 0 && reviewText.trim().length < 15) {
       setTextError("후기는 15자 이상 작성해주세요");
+      return;
+    }
+
+    if (!editMode && !agreementChecked) {
+      alert("크레딧 지급에 따른 수정/삭제 불가 안내에 동의해주세요.");
       return;
     }
 
@@ -113,6 +120,7 @@ export function ReviewModal({
       setRating(editMode && existingReview ? existingReview.rating : 5);
       setReviewText(editMode && existingReview ? existingReview.review_text || "" : "");
       setTextError("");
+      setAgreementChecked(false);
       
     } catch (error: any) {
       alert(`후기 ${editMode ? '수정' : '작성'} 실패: ${error.message}`);
@@ -132,6 +140,7 @@ export function ReviewModal({
     setRating(editMode && existingReview ? existingReview.rating : 5);
     setReviewText(editMode && existingReview ? existingReview.review_text || "" : "");
     setTextError("");
+    setAgreementChecked(false);
     onClose();
   };
 
@@ -185,6 +194,25 @@ export function ReviewModal({
             </div>
           </div>
 
+          {/* 동의 체크박스 (작성 모드에만 표시) */}
+          {!editMode && (
+            <div className="border border-amber-200 bg-amber-50 p-4 rounded-lg">
+              <div className="flex items-start space-x-3">
+                <Checkbox 
+                  id="agreement" 
+                  checked={agreementChecked}
+                  onCheckedChange={setAgreementChecked}
+                  className="mt-1"
+                />
+                <label htmlFor="agreement" className="text-sm text-gray-700 leading-relaxed cursor-pointer">
+                  <span className="font-semibold text-amber-700">⚠️ 필수 동의</span><br/>
+                  크레딧 지급에 따라 <strong>후기 작성 후 수정 및 삭제가 불가능</strong>하며, 
+                  작성된 후기는 <strong>홍보 목적으로 활용</strong>될 수 있음에 동의합니다.
+                </label>
+              </div>
+            </div>
+          )}
+
           {/* 버튼들 */}
           <div className="flex gap-3 pt-4">
             <Button 
@@ -197,7 +225,7 @@ export function ReviewModal({
             </Button>
             <Button 
               onClick={handleSubmit} 
-              disabled={isSubmitting || !!textError}
+              disabled={isSubmitting || !!textError || (!editMode && !agreementChecked)}
               className="flex-1 bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600"
             >
               {isSubmitting 

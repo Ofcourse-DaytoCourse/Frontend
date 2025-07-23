@@ -1,14 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Star, Trash2, Calendar, MapPin, Edit } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Star, Calendar, MapPin, Users, Share2 } from "lucide-react";
 import { TokenStorage } from "@/lib/storage";
-import { getMyReviews, deleteReview } from "@/lib/api";
-import { ReviewModal } from "@/components/ReviewModal";
+import { getMyReviews, getMyCourseReviews, api } from "@/lib/api";
 
-interface Review {
+interface PlaceReview {
   id: number;
   place_id: string;
   course_id: number;
@@ -21,66 +22,128 @@ interface Review {
   place_name?: string;
 }
 
+interface CourseReview {
+  id: number;
+  buyer_user_id: string;
+  shared_course_id: number;
+  purchase_id: number;
+  rating: number;
+  review_text: string;
+  tags: string[];
+  photo_urls: string[];
+  created_at: string;
+  course_title?: string;
+}
+
+interface SharedCourseReview {
+  id: number;
+  shared_course_id: number;
+  rating: number;
+  review_text: string;
+  tags: string[];
+  photo_urls: string[];
+  created_at: string;
+  course_title?: string;
+}
+
 export default function MyReviewsPage() {
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const router = useRouter();
+  
+  // 장소별 후기 상태
+  const [placeReviews, setPlaceReviews] = useState<PlaceReview[]>([]);
+  const [placeLoading, setPlaceLoading] = useState(true);
+  const [placeError, setPlaceError] = useState("");
+  
+  // 구매한 코스 후기 상태
+  const [courseReviews, setCourseReviews] = useState<CourseReview[]>([]);
+  const [courseLoading, setCourseLoading] = useState(true);
+  const [courseError, setCourseError] = useState("");
+  
+  // 내가 공유한 코스 후기 상태
+  const [sharedReviews, setSharedReviews] = useState<SharedCourseReview[]>([]);
+  const [sharedLoading, setSharedLoading] = useState(true);
+  const [sharedError, setSharedError] = useState("");
+  
+  // 공통 상태
   const [token, setToken] = useState<string | null>(null);
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editingReview, setEditingReview] = useState<Review | null>(null);
 
   useEffect(() => {
     const currentToken = TokenStorage.get();
     if (currentToken) {
       setToken(currentToken);
-      fetchMyReviews(currentToken);
+      fetchMyPlaceReviews(currentToken);
+      fetchMyCourseReviews(currentToken);
+      fetchMySharedReviews(currentToken);
     } else {
-      setError("로그인이 필요합니다.");
-      setLoading(false);
+      setPlaceError("로그인이 필요합니다.");
+      setCourseError("로그인이 필요합니다.");
+      setSharedError("로그인이 필요합니다.");
+      setPlaceLoading(false);
+      setCourseLoading(false);
+      setSharedLoading(false);
     }
   }, []);
 
-  const fetchMyReviews = async (authToken: string) => {
+  const fetchMyPlaceReviews = async (authToken: string) => {
     try {
-      setLoading(true);
+      setPlaceLoading(true);
       const data = await getMyReviews(authToken);
-      setReviews(data);
+      setPlaceReviews(data);
     } catch (error: any) {
-      setError(error.message || "후기 조회 중 오류가 발생했습니다.");
+      setPlaceError(error.message || "장소별 후기 조회 중 오류가 발생했습니다.");
     } finally {
-      setLoading(false);
+      setPlaceLoading(false);
     }
   };
 
-  const handleDeleteReview = async (reviewId: number) => {
-    if (!confirm("정말로 이 후기를 삭제하시겠습니까?")) {
-      return;
-    }
-
-    if (!token) {
-      alert("로그인이 필요합니다.");
-      return;
-    }
-
+  const fetchMyCourseReviews = async (authToken: string) => {
     try {
-      await deleteReview(reviewId, token);
-      alert("후기가 삭제되었습니다.");
-      // 목록에서 삭제된 후기 제거
-      setReviews(reviews.filter(review => review.id !== reviewId));
+      setCourseLoading(true);
+      const data = await getMyCourseReviews(authToken);
+      setCourseReviews(data);
     } catch (error: any) {
-      alert(`후기 삭제 실패: ${error.message}`);
+      setCourseError(error.message || "구매 코스 후기 조회 중 오류가 발생했습니다.");
+    } finally {
+      setCourseLoading(false);
     }
   };
 
-  const handleEditReview = (review: Review) => {
-    setEditingReview(review);
-    setEditModalOpen(true);
-  };
-
-  const handleEditSuccess = () => {
-    // 후기 목록 새로고침
-    if (token) {
-      fetchMyReviews(token);
+  const fetchMySharedReviews = async (authToken: string) => {
+    try {
+      setSharedLoading(true);
+      // 내가 공유한 코스 목록 조회 - 올바른 API 사용
+      const sharedCourses = await api("/shared_courses/my/created", "GET", undefined, authToken);
+      
+      // 공유 코스 응답에서 후기 정보 추출
+      const reviews: SharedCourseReview[] = [];
+      if (Array.isArray(sharedCourses)) {
+        for (const course of sharedCourses) {
+          // SharedCourseResponse에는 reviews 정보가 없으므로 각각 상세 조회
+          try {
+            const detailResponse = await api(`/shared_courses/${course.id}`, "GET", undefined, authToken);
+            if (detailResponse.creator_review) {
+              reviews.push({
+                id: detailResponse.creator_review.rating, // 임시 ID
+                shared_course_id: course.id,
+                rating: detailResponse.creator_review.rating,
+                review_text: detailResponse.creator_review.review_text,
+                tags: detailResponse.creator_review.tags || [],
+                photo_urls: [],
+                created_at: detailResponse.creator_review.created_at,
+                course_title: course.title
+              });
+            }
+          } catch (detailError) {
+            console.error(`공유 코스 ${course.id} 상세 정보 조회 실패:`, detailError);
+          }
+        }
+      }
+      setSharedReviews(reviews);
+    } catch (error: any) {
+      console.error("공유 코스 후기 조회 오류:", error);
+      setSharedError(error.message || "공유 코스 후기 조회 중 오류가 발생했습니다.");
+    } finally {
+      setSharedLoading(false);
     }
   };
 
@@ -102,150 +165,282 @@ export default function MyReviewsPage() {
     ));
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-4">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">내가 쓴 후기</h1>
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handlePlaceClick = (review: PlaceReview) => {
+    // 장소 페이지로 이동
+    router.push(`/places/${review.place_id}`);
+  };
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-4">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">내가 쓴 후기</h1>
-          <div className="text-center text-red-500 p-8">
-            {error}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleCourseClick = (review: CourseReview) => {
+    // 커뮤니티 코스 페이지로 이동
+    router.push(`/community/courses/${review.shared_course_id}`);
+  };
+
+  const handleSharedCourseClick = (review: SharedCourseReview) => {
+    // 공유한 코스 페이지로 이동
+    router.push(`/community/courses/${review.shared_course_id}`);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold text-gray-900 mb-6">내가 쓴 후기</h1>
         
-        {reviews.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="text-gray-400 text-6xl mb-4">📝</div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">작성한 후기가 없습니다</h3>
-            <p className="text-gray-500 mb-6">데이트 코스를 방문한 후 후기를 작성해보세요!</p>
-            <Button 
-              onClick={() => window.location.href = '/course'}
-              className="bg-blue-500 hover:bg-blue-600 text-white"
-            >
-              데이트 코스 만들기
-            </Button>
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            {reviews.map((review) => (
-              <Card key={review.id} className="bg-white shadow-sm">
-                <CardContent className="p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex items-center space-x-2 text-sm text-gray-500">
-                      <MapPin className="w-4 h-4" />
-                      <span>{review.place_name || review.place_id}</span>
-                      <span>•</span>
-                      <Calendar className="w-4 h-4" />
-                      <span>{formatDate(review.created_at)}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEditReview(review)}
-                        className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteReview(review.id)}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2 mb-3">
-                    <div className="flex space-x-1">
-                      {renderStars(review.rating)}
-                    </div>
-                    <span className="text-sm font-medium text-gray-700">
-                      {review.rating}/5
-                    </span>
-                  </div>
-                  
-                  {review.review_text && (
-                    <div className="mb-4">
-                      <p className="text-gray-800 leading-relaxed">
-                        {review.review_text}
-                      </p>
-                    </div>
-                  )}
-                  
-                  {review.tags && review.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      {review.tags.map((tag, index) => (
-                        <span
-                          key={index}
-                          className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full"
-                        >
-                          #{tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  
-                  {review.photo_urls && review.photo_urls.length > 0 && (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                      {review.photo_urls.map((url, index) => (
-                        <img
-                          key={index}
-                          src={url}
-                          alt={`후기 사진 ${index + 1}`}
-                          className="w-full h-20 object-cover rounded-md border"
-                        />
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+        <Tabs defaultValue="place" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="place" className="flex items-center gap-2">
+              <MapPin className="w-4 h-4" />
+              장소별 후기
+            </TabsTrigger>
+            <TabsTrigger value="course" className="flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              구매 코스 후기
+            </TabsTrigger>
+            <TabsTrigger value="shared" className="flex items-center gap-2">
+              <Share2 className="w-4 h-4" />
+              공유 코스 후기
+            </TabsTrigger>
+          </TabsList>
 
-        {/* 수정 모달 */}
-        {editingReview && (
-          <ReviewModal
-            isOpen={editModalOpen}
-            onClose={() => {
-              setEditModalOpen(false);
-              setEditingReview(null);
-            }}
-            placeId={editingReview.place_id}
-            placeName={editingReview.place_name || editingReview.place_id}
-            courseId={editingReview.course_id}
-            onSuccess={handleEditSuccess}
-            editMode={true}
-            existingReview={{
-              id: editingReview.id,
-              rating: editingReview.rating,
-              review_text: editingReview.review_text
-            }}
-          />
-        )}
+          {/* 장소별 후기 탭 */}
+          <TabsContent value="place">
+            {placeLoading ? (
+              <div className="flex justify-center items-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+              </div>
+            ) : placeError ? (
+              <div className="text-center text-red-500 p-8">
+                {placeError}
+              </div>
+            ) : placeReviews.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="text-gray-400 text-6xl mb-4">📍</div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">작성한 장소별 후기가 없습니다</h3>
+                <p className="text-gray-500 mb-6">데이트 코스를 방문한 후 장소별 후기를 작성해보세요!</p>
+                <Button 
+                  onClick={() => router.push('/course')}
+                  className="bg-blue-500 hover:bg-blue-600 text-white"
+                >
+                  데이트 코스 만들기
+                </Button>
+              </div>
+            ) : (
+              <div className="grid gap-4 mt-4">
+                {placeReviews.map((review) => (
+                  <Card 
+                    key={review.id} 
+                    className="bg-white shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => handlePlaceClick(review)}
+                  >
+                    <CardContent className="p-6">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center space-x-2 text-sm text-gray-500">
+                          <MapPin className="w-4 h-4" />
+                          <span className="font-medium">{review.place_name || review.place_id}</span>
+                          <span>•</span>
+                          <Calendar className="w-4 h-4" />
+                          <span>{formatDate(review.created_at)}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2 mb-3">
+                        <div className="flex space-x-1">
+                          {renderStars(review.rating)}
+                        </div>
+                        <span className="text-sm font-medium text-gray-700">
+                          {review.rating}/5
+                        </span>
+                      </div>
+                      
+                      {review.review_text && (
+                        <div className="mb-4">
+                          <p className="text-gray-800 leading-relaxed line-clamp-3">
+                            {review.review_text}
+                          </p>
+                        </div>
+                      )}
+                      
+                      {review.tags && review.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {review.tags.slice(0, 3).map((tag, index) => (
+                            <span
+                              key={index}
+                              className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full"
+                            >
+                              #{tag}
+                            </span>
+                          ))}
+                          {review.tags.length > 3 && (
+                            <span className="text-xs text-gray-500">+{review.tags.length - 3}개 더</span>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* 구매한 코스 후기 탭 */}
+          <TabsContent value="course">
+            {courseLoading ? (
+              <div className="flex justify-center items-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+              </div>
+            ) : courseError ? (
+              <div className="text-center text-red-500 p-8">
+                {courseError}
+              </div>
+            ) : courseReviews.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="text-gray-400 text-6xl mb-4">💰</div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">작성한 구매 코스 후기가 없습니다</h3>
+                <p className="text-gray-500 mb-6">커뮤니티에서 코스를 구매한 후 후기를 작성해보세요!</p>
+                <Button 
+                  onClick={() => router.push('/community/courses')}
+                  className="bg-green-500 hover:bg-green-600 text-white"
+                >
+                  커뮤니티 코스 둘러보기
+                </Button>
+              </div>
+            ) : (
+              <div className="grid gap-4 mt-4">
+                {courseReviews.map((review) => (
+                  <Card 
+                    key={review.id} 
+                    className="bg-white shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => handleCourseClick(review)}
+                  >
+                    <CardContent className="p-6">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center space-x-2 text-sm text-gray-500">
+                          <Users className="w-4 h-4" />
+                          <span className="font-medium">{review.course_title || `코스 ID: ${review.shared_course_id}`}</span>
+                          <span>•</span>
+                          <Calendar className="w-4 h-4" />
+                          <span>{formatDate(review.created_at)}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2 mb-3">
+                        <div className="flex space-x-1">
+                          {renderStars(review.rating)}
+                        </div>
+                        <span className="text-sm font-medium text-gray-700">
+                          {review.rating}/5
+                        </span>
+                      </div>
+                      
+                      {review.review_text && (
+                        <div className="mb-4">
+                          <p className="text-gray-800 leading-relaxed line-clamp-3">
+                            {review.review_text}
+                          </p>
+                        </div>
+                      )}
+                      
+                      {review.tags && review.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {review.tags.slice(0, 3).map((tag, index) => (
+                            <span
+                              key={index}
+                              className="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full"
+                            >
+                              #{tag}
+                            </span>
+                          ))}
+                          {review.tags.length > 3 && (
+                            <span className="text-xs text-gray-500">+{review.tags.length - 3}개 더</span>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* 공유한 코스 후기 탭 */}
+          <TabsContent value="shared">
+            {sharedLoading ? (
+              <div className="flex justify-center items-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
+              </div>
+            ) : sharedError ? (
+              <div className="text-center text-red-500 p-8">
+                {sharedError}
+              </div>
+            ) : sharedReviews.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="text-gray-400 text-6xl mb-4">🚀</div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">공유한 코스 후기가 없습니다</h3>
+                <p className="text-gray-500 mb-6">내가 만든 코스를 커뮤니티에 공유해보세요!</p>
+                <Button 
+                  onClick={() => router.push('/list')}
+                  className="bg-purple-500 hover:bg-purple-600 text-white"
+                >
+                  내 코스 보기
+                </Button>
+              </div>
+            ) : (
+              <div className="grid gap-4 mt-4">
+                {sharedReviews.map((review) => (
+                  <Card 
+                    key={review.id} 
+                    className="bg-white shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => handleSharedCourseClick(review)}
+                  >
+                    <CardContent className="p-6">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center space-x-2 text-sm text-gray-500">
+                          <Share2 className="w-4 h-4" />
+                          <span className="font-medium">{review.course_title || `공유 코스 ID: ${review.shared_course_id}`}</span>
+                          <span>•</span>
+                          <Calendar className="w-4 h-4" />
+                          <span>{formatDate(review.created_at)}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2 mb-3">
+                        <div className="flex space-x-1">
+                          {renderStars(review.rating)}
+                        </div>
+                        <span className="text-sm font-medium text-gray-700">
+                          {review.rating}/5
+                        </span>
+                      </div>
+                      
+                      {review.review_text && (
+                        <div className="mb-4">
+                          <p className="text-gray-800 leading-relaxed line-clamp-3">
+                            {review.review_text}
+                          </p>
+                        </div>
+                      )}
+                      
+                      {review.tags && review.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {review.tags.slice(0, 3).map((tag, index) => (
+                            <span
+                              key={index}
+                              className="inline-block bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full"
+                            >
+                              #{tag}
+                            </span>
+                          ))}
+                          {review.tags.length > 3 && (
+                            <span className="text-xs text-gray-500">+{review.tags.length - 3}개 더</span>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

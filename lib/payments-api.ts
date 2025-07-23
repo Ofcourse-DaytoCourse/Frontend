@@ -19,7 +19,7 @@ export interface DepositGenerateResponse {
 
 export interface BalanceDeductRequest {
   amount: number;
-  service_type: 'course_generation' | 'premium_feature' | 'chat_service' | 'other';
+  service_type: 'course_generation' | 'premium_feature' | 'chat_service' | 'ai_search' | 'other';
   service_id?: string;
   description?: string;
 }

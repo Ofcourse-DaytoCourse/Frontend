@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Star, MapPin, Phone, Clock, DollarSign, ArrowLeft, Share2, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -46,6 +47,9 @@ export default function ShareCoursePage() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  
+  // 확인사항 체크 상태
+  const [agreedToAll, setAgreedToAll] = useState(false);
 
   const predefinedTags = [
     '로맨틱', '인스타감성', '힐링', '액티비티', '맛집투어',
@@ -147,12 +151,23 @@ export default function ShareCoursePage() {
     } catch (error: any) {
       console.error('공유 실패:', error);
       
+      // 장소별 후기처럼 alert으로 표시 (테스트용)
+      alert(`코스 공유 실패: ${error.message}`);
+      
+      // 기존 toast 처리도 유지
       if (error.message?.includes('이미 공유된')) {
         toast.error('이미 공유된 코스입니다.');
       } else if (error.message?.includes('권한')) {
         toast.error('이 코스를 공유할 권한이 없습니다.');
+      } else if (error.message?.includes('후기 작성이 거부되었습니다')) {
+        // GPT 검증 실패 메시지 처리
+        toast.error(error.message);
+      } else if (error.message?.includes('1분 내에 이미 부적절한')) {
+        // Rate Limit 메시지 처리
+        toast.error(error.message);
       } else {
-        toast.error('코스 공유에 실패했습니다. 다시 시도해주세요.');
+        // 기타 에러는 백엔드 메시지 그대로 표시하되, 없으면 기본 메시지
+        toast.error(error.message || '코스 공유에 실패했습니다. 다시 시도해주세요.');
       }
     } finally {
       setSharing(false);
@@ -372,7 +387,27 @@ export default function ShareCoursePage() {
                   </div>
                 </div>
 
-                {/* 크레딧 안내 */}
+                {/* 공유 전 확인사항 체크 */}
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                  <h3 className="font-medium text-amber-800 mb-3">⚠️ 공유 전 확인사항</h3>
+                  <div className="text-sm text-amber-700 space-y-2 mb-4">
+                    <p>• 공유된 코스와 후기는 <span className="font-semibold">수정 및 삭제가 불가능</span>합니다</p>
+                    <p>• 작성한 후기가 홍보 목적으로 사용될 수 있습니다</p>
+                    <p>• 부적절한 내용의 후기는 AI가 자동으로 차단할 수 있습니다</p>
+                  </div>
+                  
+                  <div className="flex items-start space-x-3">
+                    <Checkbox 
+                      id="agree-all" 
+                      checked={agreedToAll}
+                      onCheckedChange={(checked) => setAgreedToAll(checked as boolean)}
+                    />
+                    <label htmlFor="agree-all" className="text-sm text-amber-800 font-medium cursor-pointer">
+                      위 모든 사항을 확인했으며 동의합니다
+                    </label>
+                  </div>
+                </div>
+
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                   <h3 className="font-medium text-green-800 mb-2">🎁 공유 보상</h3>
                   <div className="text-sm text-green-700 space-y-1">
@@ -386,7 +421,13 @@ export default function ShareCoursePage() {
 
                 <Button 
                   onClick={handleShare}
-                  disabled={sharing || reviewText.length < 15 || !title.trim() || !description.trim()}
+                  disabled={
+                    sharing || 
+                    reviewText.length < 15 || 
+                    !title.trim() || 
+                    !description.trim() ||
+                    !agreedToAll
+                  }
                   className="w-full bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600"
                   size="lg"
                 >
