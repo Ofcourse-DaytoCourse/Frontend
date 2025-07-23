@@ -269,6 +269,35 @@ export default function HomePage() {
               </CardContent>
             </Card>
 
+            {/* 커뮤니티 코스 카드 */}
+            <Card 
+              className="bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-200 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 cursor-pointer group"
+              onClick={() => router.push("/community/courses")}
+            >
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-14 h-14 bg-gradient-to-br from-emerald-400 to-green-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <Users className="w-7 h-7 text-white" />
+                  </div>
+                  <Badge className="bg-emerald-500 text-white px-3 py-1 text-sm font-semibold shadow-md">
+                    HOT
+                  </Badge>
+                </div>
+                <CardTitle className="text-xl font-bold text-gray-800 group-hover:text-emerald-600 transition-colors duration-300">
+                  커뮤니티 코스
+                </CardTitle>
+                <CardDescription className="text-gray-600 leading-relaxed">
+                  다른 사용자들이 공유한 데이트 코스를 구매하세요
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center text-emerald-500 font-medium group-hover:translate-x-2 transition-transform duration-300">
+                  <span>구매하기</span>
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </div>
+              </CardContent>
+            </Card>
+
             {/* 인기 장소 둘러보기 카드 */}
             <Card 
               className="bg-gradient-to-br from-teal-50 to-cyan-50 border-teal-200 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 cursor-pointer group"

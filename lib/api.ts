@@ -198,3 +198,30 @@ export const deleteReview = (reviewId: number, token: string): Promise<any> =>
 // 26. 후기 수정
 export const updateReview = (reviewId: number, reviewData: any, token: string): Promise<any> =>
   api(`/reviews/${reviewId}`, "PUT", reviewData, token);
+
+// 27. 코스 공유하기
+export const createSharedCourse = (shareData: any, token: string): Promise<any> =>
+  api("/shared_courses/create", "POST", shareData, token);
+
+// 28. 공유 코스 목록 조회
+export const getSharedCourses = (params?: { skip?: number; limit?: number; sort_by?: string }, token?: string): Promise<any> => {
+  const queryParams = new URLSearchParams();
+  if (params?.skip !== undefined) queryParams.append('skip', params.skip.toString());
+  if (params?.limit !== undefined) queryParams.append('limit', params.limit.toString());
+  if (params?.sort_by) queryParams.append('sort_by', params.sort_by);
+  
+  const url = `/shared_courses/${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+  return api(url, "GET", undefined, token);
+};
+
+// 29. 공유 코스 상세 조회
+export const getSharedCourseDetail = (courseId: number, token?: string): Promise<any> =>
+  api(`/shared_courses/${courseId}`, "GET", undefined, token);
+
+// 30. 코스 구매하기
+export const purchaseCourse = (courseId: number, token: string): Promise<any> =>
+  api(`/shared_courses/${courseId}/purchase`, "POST", undefined, token);
+
+// 31. 구매한 코스 저장하기
+export const savePurchasedCourse = (courseId: number, token: string): Promise<any> =>
+  api(`/shared_courses/${courseId}/save`, "POST", undefined, token);

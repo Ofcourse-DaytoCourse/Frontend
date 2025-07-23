@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Edit3, Trash2, Share2, Heart, MapPin, Phone, Star, Sparkles, Clock, Navigation, Gift } from "lucide-react";
 import { ReviewModal } from "@/components/ReviewModal";
 
@@ -22,10 +23,18 @@ export default function CourseDetailPage() {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [isPurchasedCourse, setIsPurchasedCourse] = useState(false);
+  const [purchaseInfo, setPurchaseInfo] = useState<any>(null);
+  const [hasReviewed, setHasReviewed] = useState(false);
   const [reviewModal, setReviewModal] = useState({
     isOpen: false,
     placeId: "",
     placeName: "",
+  });
+  const [courseReviewModal, setCourseReviewModal] = useState({
+    isOpen: false,
+    sharedCourseId: 0,
+    purchaseId: 0,
   });
   const [reviewPermissions, setReviewPermissions] = useState<{[key: string]: {can_write: boolean, reason: string}}>({});
 
@@ -51,6 +60,26 @@ export default function CourseDetailPage() {
         setCourse(data.course);
         setTitle(data.course.title);
         setDescription(data.course.description);
+        setIsPurchasedCourse(data.is_purchased_course || false);
+        
+        // 구매한 코스라면 구매 정보 가져오기
+        if (data.is_purchased_course) {
+          const purchasedCourses = await api(`/shared_courses/my/purchased`, "GET", undefined, token);
+          const purchase = purchasedCourses.find((p: any) => p.copied_course_id === parseInt(courseId));
+          if (purchase) {
+            setPurchaseInfo(purchase);
+            
+            // 후기 작성 여부 확인
+            try {
+              const reviewsResponse = await api(`/shared_courses/reviews/buyer/course/${purchase.shared_course_id}`, "GET", undefined, token);
+              const userReview = reviewsResponse.find((review: any) => review.buyer_user_id === user.user_id);
+              setHasReviewed(!!userReview);
+            } catch (error) {
+              console.log('후기 확인 중 오류:', error);
+              setHasReviewed(false);
+            }
+          }
+        }
 
         // 각 장소별 후기 작성 권한 확인
         if (data.course.places && token) {
@@ -111,7 +140,17 @@ export default function CourseDetailPage() {
     try {
       const token = TokenStorage.get();
       await api("/courses/share", "POST", { course_id: Number(courseId), user_id: user.user_id }, token);
-      alert("코스가 공유되었습니다!");
+      
+      // 새로운 공유 상태로 업데이트
+      const wasShared = course?.is_shared_with_couple || false;
+      if (wasShared) {
+        alert("코스 공유가 취소되었습니다!");
+      } else {
+        alert("코스가 공유되었습니다!");
+      }
+      
+      // 페이지 새로고침하여 최신 데이터 반영
+      window.location.reload();
     } catch (err: any) {
       console.error("코스 공유 실패:", err);
       alert("공유 실패: " + err.message);
@@ -336,8 +375,51 @@ export default function CourseDetailPage() {
                   <div className="flex flex-row lg:flex-col gap-3">
                     <Button onClick={handleShare} className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-full px-6 py-3 shadow-lg">
                       <Share2 className="h-4 w-4 mr-2" />
-                      공유하기
+                      연인에게 공유
                     </Button>
+                    
+                    {isPurchasedCourse ? (
+                      // 구매한 코스인 경우: 후기 작성 여부에 따라 버튼 표시
+                      !hasReviewed ? (
+                        <Button 
+                          onClick={() => {
+                            if (purchaseInfo) {
+                              setCourseReviewModal({
+                                isOpen: true,
+                                sharedCourseId: purchaseInfo.shared_course_id,
+                                purchaseId: purchaseInfo.id,
+                              });
+                            } else {
+                              alert('구매 정보를 찾을 수 없습니다.');
+                            }
+                          }}
+                          className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white rounded-full px-6 py-3 shadow-lg"
+                        >
+                          <Star className="h-4 w-4 mr-2" />
+                          후기 작성하기
+                        </Button>
+                      ) : (
+                        <div className="flex items-center justify-center text-green-600 font-medium bg-green-50 rounded-full px-6 py-3">
+                          <Star className="h-4 w-4 mr-2" />
+                          후기 작성 완료
+                        </div>
+                      )
+                    ) : (
+                      // 내가 만든 코스인 경우: 커뮤니티 공유 버튼
+                      <Button 
+                        onClick={() => router.push(`/share-course/${courseId}`)} 
+                        disabled={course?.is_shared_to_community}
+                        className={`rounded-full px-6 py-3 shadow-lg ${
+                          course?.is_shared_to_community
+                            ? "bg-gray-400 text-gray-600 cursor-not-allowed"
+                            : "bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white"
+                        }`}
+                      >
+                        <Gift className="h-4 w-4 mr-2" />
+                        {course?.is_shared_to_community ? "이미 공유됨" : "커뮤니티에 공유"}
+                      </Button>
+                    )}
+                    
                     <Button onClick={handleDelete} className="bg-gradient-to-r from-red-400 to-pink-500 hover:from-red-500 hover:to-pink-600 text-white rounded-full px-6 py-3 shadow-lg">
                       <Trash2 className="h-4 w-4 mr-2" />
                       삭제하기
@@ -567,6 +649,175 @@ export default function CourseDetailPage() {
           }}
         />
       )}
+
+      {/* 코스 후기 작성 모달 */}
+      {courseReviewModal.isOpen && (
+        <CourseReviewModal
+          isOpen={courseReviewModal.isOpen}
+          onClose={() => setCourseReviewModal(prev => ({ ...prev, isOpen: false }))}
+          sharedCourseId={courseReviewModal.sharedCourseId}
+          purchaseId={courseReviewModal.purchaseId}
+          courseTitle={title}
+          onSuccess={() => {
+            alert('후기가 작성되었습니다!');
+            setCourseReviewModal(prev => ({ ...prev, isOpen: false }));
+            setHasReviewed(true); // 후기 작성 완료 상태로 변경
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// 코스 후기 작성 모달 컴포넌트
+function CourseReviewModal({ 
+  isOpen, 
+  onClose, 
+  sharedCourseId, 
+  purchaseId, 
+  courseTitle,
+  onSuccess 
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  sharedCourseId: number;
+  purchaseId: number;
+  courseTitle: string;
+  onSuccess: () => void;
+}) {
+  const [rating, setRating] = useState(5);
+  const [reviewText, setReviewText] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const predefinedTags = [
+    '완벽해요', '추천해요', '로맨틱해요', '재미있어요', '힐링돼요',
+    '인스타감성', '맛집투어', '액티비티', '저예산', '고급스러워요'
+  ];
+
+  const handleSubmit = async () => {
+    if (reviewText.trim().length < 15) {
+      alert('후기는 최소 15자 이상 작성해주세요.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const token = TokenStorage.get();
+      const reviewData = {
+        shared_course_id: sharedCourseId,
+        purchase_id: purchaseId,
+        rating,
+        review_text: reviewText.trim(),
+        tags: selectedTags,
+        photo_urls: [] // TODO: 사진 업로드 기능 추가 시
+      };
+
+      await api('/shared_courses/reviews/buyer', 'POST', reviewData, token);
+      onSuccess();
+    } catch (error) {
+      console.error('후기 작성 실패:', error);
+      alert('후기 작성에 실패했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev => 
+      prev.includes(tag) 
+        ? prev.filter(t => t !== tag)
+        : [...prev, tag]
+    );
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-bold text-gray-800">코스 후기 작성</h2>
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              ✕
+            </Button>
+          </div>
+
+          {/* 코스 제목 */}
+          <div className="mb-6">
+            <p className="text-sm text-gray-600 mb-2">구매한 코스</p>
+            <p className="font-medium text-gray-800">{courseTitle}</p>
+          </div>
+
+          {/* 평점 */}
+          <div className="mb-6">
+            <p className="font-medium text-gray-700 mb-3">평점</p>
+            <div className="flex gap-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  onClick={() => setRating(star)}
+                  className={`text-2xl ${star <= rating ? 'text-yellow-400' : 'text-gray-300'}`}
+                >
+                  ★
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 후기 텍스트 */}
+          <div className="mb-6">
+            <p className="font-medium text-gray-700 mb-3">후기 (최소 15자)</p>
+            <Textarea
+              value={reviewText}
+              onChange={(e) => setReviewText(e.target.value)}
+              placeholder="코스는 어떠셨나요? 솔직한 후기를 남겨주세요."
+              className="h-24"
+            />
+            <p className="text-sm text-gray-500 mt-1">{reviewText.length}/500</p>
+          </div>
+
+          {/* 태그 */}
+          <div className="mb-6">
+            <p className="font-medium text-gray-700 mb-3">태그 (선택)</p>
+            <div className="flex flex-wrap gap-2">
+              {predefinedTags.map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() => toggleTag(tag)}
+                  className={`px-3 py-1 rounded-full text-sm border transition-colors ${
+                    selectedTags.includes(tag)
+                      ? 'bg-blue-500 text-white border-blue-500'
+                      : 'bg-white text-gray-600 border-gray-300 hover:border-blue-500'
+                  }`}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 버튼 */}
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={onClose}
+              className="flex-1"
+              disabled={isSubmitting}
+            >
+              취소
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              className="flex-1 bg-yellow-500 hover:bg-yellow-600"
+              disabled={isSubmitting || reviewText.trim().length < 15}
+            >
+              {isSubmitting ? '작성 중...' : '후기 작성'}
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
