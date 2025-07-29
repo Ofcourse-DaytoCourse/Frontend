@@ -1029,8 +1029,8 @@ export default function PlacesPage() {
                     </Button>
                     
                     <div className="text-sm text-text-secondary">
-                      day: <span className="font-semibold text-primary-pink">
-                        {balance ? balance.total_balance.toLocaleString() : '0'}원
+                      남은 day: <span className="font-semibold text-primary-pink">
+                        {balance ? balance.total_balance.toLocaleString() : '0'}
                       </span>
                     </div>
                   </div>
