@@ -13,6 +13,18 @@ const config: Config = {
   theme: {
   	extend: {
   		colors: {
+  			"primary-pink": "#E879B9",
+  			"secondary-pink": "#FDF2F8",
+  			"light-purple": "#C084FC",
+  			"soft-purple": "#F5F3FF",
+  			"muted-pink": "#FEFCFF",
+  			"accent-pink": "#F3E8FF",
+  			"brand-background": "#FEFEFE",
+  			"card-background": "#FFFFFF",
+  			"text-primary": "#1F2937",
+  			"text-secondary": "#6B7280",
+  			"brand-border": "#F3E8FF",
+  			"brand-accent": "#FCF7FF",
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			card: {

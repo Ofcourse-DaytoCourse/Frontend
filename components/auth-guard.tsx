@@ -23,9 +23,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
     const token = TokenStorage.get();
     const user = UserStorage.get();
-    const openPaths = ["/login", "/signup", "/login/callback", "/admin"];
-
-    const isOpenPath = openPaths.some(p => pathname.startsWith(p));
+    const openPaths = ["/", "/login", "/signup", "/login/callback", "/admin"];
+    
+    // 특별한 경우: /community는 공개이지만 /community/courses로 시작하는 모든 경로는 로그인 필요
+    const isOpenPath = openPaths.some(p => pathname.startsWith(p)) || 
+                      (pathname === "/community" && !pathname.startsWith("/community/courses"));
 
     // ✅ 공개 경로 처리
     if (isOpenPath) {

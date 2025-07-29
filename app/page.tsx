@@ -1,455 +1,344 @@
-// 완전 새로운 로맨틱 메인 페이지 💕
-"use client";
+"use client"
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Heart, MapPin, Sparkles, Users, Calendar, ArrowRight, Star, Gift, Zap, PlusCircle, List, Wallet, TrendingUp, Clock, FileText } from "lucide-react";
-import { TokenStorage, UserStorage } from "@/lib/storage";
-import { getMyProfile, getCourses } from "@/lib/api";
-import { paymentsApi } from "@/lib/payments-api";
-import type { User } from "@/types/api";
+import { useState, useEffect } from "react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Bot, ArrowRight, MessageSquare, Star, Users, Sparkles, Clock, Target } from "lucide-react"
+import Link from "next/link"
+import Image from "next/image"
+import { useAuth } from "@/contexts/auth-context"
 
-interface DashboardData {
-  currentBalance: number;
-  monthlyUsage: number;
-  savedCourses: number;
-  user: User | null;
-}
-
-export default function HomePage() {
-  const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
-  const [dashboardData, setDashboardData] = useState<DashboardData>({
-    currentBalance: 0,
-    monthlyUsage: 0,
-    savedCourses: 0,
-    user: null
-  });
-  const [dataLoading, setDataLoading] = useState(false);
-  const [dataError, setDataError] = useState<string | null>(null);
-
-  // 대시보드 데이터 로드 함수
-  const loadDashboardData = async (token: string, userId: string) => {
-    try {
-      setDataLoading(true);
-      setDataError(null);
-
-      // 병렬로 API 호출
-      const [balanceRes, coursesRes, profileRes, historyRes] = await Promise.allSettled([
-        paymentsApi.getBalanceSummary(token),
-        getCourses(parseInt(userId), token),
-        getMyProfile(userId, token),
-        paymentsApi.getPaymentHistory({ page: 1, size: 50, history_type: 'usage' }, token)
-      ]);
-
-      const newData: DashboardData = {
-        currentBalance: 0,
-        monthlyUsage: 0,
-        savedCourses: 0,
-        user: null
-      };
-
-      // 잔액 정보
-      if (balanceRes.status === 'fulfilled') {
-        newData.currentBalance = balanceRes.value.total_balance;
-      }
-
-      // 코스 개수
-      if (coursesRes.status === 'fulfilled') {
-        console.log('Courses API result:', coursesRes.value);
-        newData.savedCourses = coursesRes.value.courses?.length || 0;
-      } else {
-        console.error('Courses API failed:', coursesRes.reason);
-      }
-
-      // 사용자 정보
-      if (profileRes.status === 'fulfilled') {
-        newData.user = profileRes.value.user;
-      }
-
-      // 이번 달 사용량 계산
-      if (historyRes.status === 'fulfilled') {
-        const currentMonth = new Date().getMonth();
-        const currentYear = new Date().getFullYear();
-        
-        const monthlyUsage = historyRes.value.usage_histories?.reduce((total, history) => {
-          const historyDate = new Date(history.created_at);
-          if (historyDate.getMonth() === currentMonth && historyDate.getFullYear() === currentYear) {
-            return total + history.amount;
-          }
-          return total;
-        }, 0) || 0;
-        
-        newData.monthlyUsage = monthlyUsage;
-      }
-
-      setDashboardData(newData);
-    } catch (error) {
-      setDataError("대시보드 정보를 불러오는 중 오류가 발생했습니다.");
-      console.error("Dashboard data loading error:", error);
-    } finally {
-      setDataLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    // AuthGuard에서 모든 리다이렉트를 처리
-    const timer = setTimeout(async () => {
-      const token = TokenStorage.get();
-      const user = UserStorage.get();
-      
-      if (!token || !user) {
-        router.push("/login");
-        return;
-      }
-      
-      // 로그인된 사용자는 메인 페이지 표시
-      setIsLoading(false);
-      
-      // 대시보드 데이터 로드
-      await loadDashboardData(token, user.user_id.toString());
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [router]);
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-rose-100 via-pink-50 to-purple-100 relative overflow-hidden">
-        {/* 배경 장식 */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute -top-10 -left-10 w-72 h-72 bg-gradient-to-br from-pink-300/30 to-rose-400/30 rounded-full blur-3xl animate-pulse"></div>
-          <div className="absolute top-1/2 -right-20 w-96 h-96 bg-gradient-to-br from-purple-300/30 to-pink-400/30 rounded-full blur-3xl animate-pulse delay-1000"></div>
+const HeroSection = () => (
+  <section className="relative bg-white py-20 sm:py-32">
+    <div className="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+      <div className="text-center space-y-12">
+        {/* Main Heading */}
+        <div className="space-y-6">
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-text-primary leading-tight">
+            나만의 데이트 코스,
+            <br />
+            <span className="text-primary-pink">AI가 다 짜줄게요</span>
+          </h1>
+          <p className="text-xl sm:text-2xl font-medium text-light-purple max-w-3xl mx-auto">
+            감성은 살리고, 고민은 줄이고.
+          </p>
+          <p className="text-lg text-text-secondary leading-relaxed max-w-4xl mx-auto">
+            내 연인, 내 상황, 내 취향에 딱 맞춘 데이트 추천.
+            <br />
+            <span className="font-semibold text-text-primary">지금 당장, AI 코스를 시작해보세요!</span>
+          </p>
         </div>
-        
-        <div className="relative container mx-auto px-4 py-8">
-          <div className="flex items-center justify-center min-h-[60vh]">
-            <div className="text-center space-y-6">
-              <div className="relative">
-                <div className="w-20 h-20 mx-auto border-4 border-pink-300 border-t-rose-500 rounded-full animate-spin"></div>
-                <Heart className="absolute inset-0 m-auto w-8 h-8 text-rose-500 animate-pulse" />
-              </div>
-              <div className="space-y-2">
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-rose-600 to-pink-600 bg-clip-text text-transparent">
-                  사랑스러운 순간을 준비하는 중...
-                </h2>
-                <p className="text-rose-400 animate-pulse">💕 잠시만 기다려주세요 💕</p>
-              </div>
+
+        {/* Service Features */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+          <div className="text-center space-y-4">
+            <div className="w-16 h-16 bg-secondary-pink rounded-2xl flex items-center justify-center mx-auto">
+              <Sparkles className="w-8 h-8 text-primary-pink" />
             </div>
+            <h3 className="text-xl font-bold text-text-primary">AI 맞춤 추천</h3>
+            <p className="text-text-secondary">MBTI, 취향, 예산까지 고려한 완벽한 코스 설계</p>
+          </div>
+          <div className="text-center space-y-4">
+            <div className="w-16 h-16 bg-soft-purple rounded-2xl flex items-center justify-center mx-auto">
+              <Clock className="w-8 h-8 text-light-purple" />
+            </div>
+            <h3 className="text-xl font-bold text-text-primary">실시간 채팅</h3>
+            <p className="text-text-secondary">AI와 대화하며 실시간으로 코스를 조정하고 완성</p>
+          </div>
+          <div className="text-center space-y-4">
+            <div className="w-16 h-16 bg-secondary-pink rounded-2xl flex items-center justify-center mx-auto">
+              <Target className="w-8 h-8 text-primary-pink" />
+            </div>
+            <h3 className="text-xl font-bold text-text-primary">검증된 코스</h3>
+            <p className="text-text-secondary">실제 커플들이 검증한 리얼 후기 기반 코스 마켓</p>
           </div>
         </div>
-      </div>
-    );
-  }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-rose-100 via-pink-50 to-purple-100 relative overflow-hidden">
-      {/* 배경 장식 요소들 */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-10 -left-10 w-72 h-72 bg-gradient-to-br from-pink-300/20 to-rose-400/20 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute top-1/2 -right-20 w-96 h-96 bg-gradient-to-br from-purple-300/20 to-pink-400/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
-        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-gradient-to-br from-rose-300/15 to-purple-400/15 rounded-full blur-3xl animate-pulse delay-2000"></div>
-      </div>
-
-      {/* 하트 플로팅 애니메이션 */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {[...Array(8)].map((_, i) => (
-          <Heart 
-            key={i}
-            className={`absolute w-4 h-4 text-pink-300/40 animate-bounce`}
-            style={{
-              left: `${15 + i * 12}%`,
-              top: `${20 + (i % 3) * 20}%`,
-              animationDelay: `${i * 0.6}s`,
-              animationDuration: '4s'
-            }}
-          />
-        ))}
-      </div>
-
-      {/* 메인 컨텐츠 */}
-      <div className="relative">
-        <div className="container mx-auto px-4 py-16">
-          {/* 헤더 */}
-          <div className="text-center mb-12">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">
-              <span className="bg-gradient-to-r from-rose-600 to-pink-600 bg-clip-text text-transparent">
-                {!isLoading && dashboardData.user?.nickname ? `${dashboardData.user.nickname}님의 ` : ""}데이트 코스 추천
-              </span>
-            </h1>
-            <p className="text-lg text-gray-600">
-              AI가 맞춤형 데이트 코스를 추천해드립니다 ✨
-            </p>
-          </div>
-
-          {/* 메인 메뉴 카드들 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-20 max-w-7xl mx-auto">
-            {/* AI 코스 추천 카드 */}
-            <Card 
-              className="bg-gradient-to-br from-rose-50 to-pink-50 border-rose-200 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 cursor-pointer group"
-              onClick={() => router.push("/course")}
-            >
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-rose-400 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <Heart className="w-7 h-7 text-white" />
-                  </div>
-                  <Badge className="bg-rose-500 text-white px-3 py-1 text-sm font-semibold shadow-md">
-                    1,000원
-                  </Badge>
-                </div>
-                <CardTitle className="text-xl font-bold text-gray-800 group-hover:text-rose-600 transition-colors duration-300">
-                  AI 코스 추천
-                </CardTitle>
-                <CardDescription className="text-gray-600 leading-relaxed">
-                  맞춤형 데이트 코스를 AI가 추천해드립니다
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center text-rose-500 font-medium group-hover:translate-x-2 transition-transform duration-300">
-                  <span>시작하기</span>
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 내 코스 관리 카드 */}
-            <Card 
-              className="bg-gradient-to-br from-purple-50 to-rose-50 border-purple-200 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 cursor-pointer group"
-              onClick={() => router.push("/list")}
-            >
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-purple-400 to-rose-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <List className="w-7 h-7 text-white" />
-                  </div>
-                </div>
-                <CardTitle className="text-xl font-bold text-gray-800 group-hover:text-purple-600 transition-colors duration-300">
-                  내 코스 관리
-                </CardTitle>
-                <CardDescription className="text-gray-600 leading-relaxed">
-                  저장된 코스를 확인하고 관리하세요
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center text-purple-500 font-medium group-hover:translate-x-2 transition-transform duration-300">
-                  <span>확인하기</span>
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 공유된 코스 카드 */}
-            <Card 
-              className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 cursor-pointer group"
-              onClick={() => router.push("/shared")}
-            >
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <Gift className="w-7 h-7 text-white" />
-                  </div>
-                </div>
-                <CardTitle className="text-xl font-bold text-gray-800 group-hover:text-blue-600 transition-colors duration-300">
-                  공유된 코스
-                </CardTitle>
-                <CardDescription className="text-gray-600 leading-relaxed">
-                  다른 사용자들의 데이트 코스를 둘러보세요
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center text-blue-500 font-medium group-hover:translate-x-2 transition-transform duration-300">
-                  <span>구경하기</span>
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 커뮤니티 코스 카드 */}
-            <Card 
-              className="bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-200 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 cursor-pointer group"
-              onClick={() => router.push("/community/courses")}
-            >
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-emerald-400 to-green-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <Users className="w-7 h-7 text-white" />
-                  </div>
-                  <Badge className="bg-emerald-500 text-white px-3 py-1 text-sm font-semibold shadow-md">
-                    HOT
-                  </Badge>
-                </div>
-                <CardTitle className="text-xl font-bold text-gray-800 group-hover:text-emerald-600 transition-colors duration-300">
-                  커뮤니티 코스
-                </CardTitle>
-                <CardDescription className="text-gray-600 leading-relaxed">
-                  다른 사용자들이 공유한 데이트 코스를 구매하세요
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center text-emerald-500 font-medium group-hover:translate-x-2 transition-transform duration-300">
-                  <span>구매하기</span>
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 인기 장소 둘러보기 카드 */}
-            <Card 
-              className="bg-gradient-to-br from-teal-50 to-cyan-50 border-teal-200 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 cursor-pointer group"
-              onClick={() => router.push("/places")}
-            >
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-teal-400 to-cyan-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <MapPin className="w-7 h-7 text-white" />
-                  </div>
-                  <Badge className="bg-teal-500 text-white px-3 py-1 text-sm font-semibold shadow-md">
-                    NEW
-                  </Badge>
-                </div>
-                <CardTitle className="text-xl font-bold text-gray-800 group-hover:text-teal-600 transition-colors duration-300">
-                  인기 장소 둘러보기
-                </CardTitle>
-                <CardDescription className="text-gray-600 leading-relaxed">
-                  다른 사용자들이 추천하는 핫플을 확인하세요
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center text-teal-500 font-medium group-hover:translate-x-2 transition-transform duration-300">
-                  <span>탐색하기</span>
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 내 후기 관리 카드 */}
-            <Card 
-              className="bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 cursor-pointer group"
-              onClick={() => router.push("/my-reviews")}
-            >
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <FileText className="w-7 h-7 text-white" />
-                  </div>
-                </div>
-                <CardTitle className="text-xl font-bold text-gray-800 group-hover:text-amber-600 transition-colors duration-300">
-                  내 후기 관리
-                </CardTitle>
-                <CardDescription className="text-gray-600 leading-relaxed">
-                  작성한 후기를 확인하고 관리하세요
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center text-amber-500 font-medium group-hover:translate-x-2 transition-transform duration-300">
-                  <span>확인하기</span>
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 마이페이지 카드 */}
-            <Card 
-              className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 cursor-pointer group"
-              onClick={() => router.push("/mypage")}
-            >
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-green-400 to-emerald-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <Users className="w-7 h-7 text-white" />
-                  </div>
-                </div>
-                <CardTitle className="text-xl font-bold text-gray-800 group-hover:text-green-600 transition-colors duration-300">
-                  마이페이지
-                </CardTitle>
-                <CardDescription className="text-gray-600 leading-relaxed">
-                  프로필 및 계정 설정을 관리하세요
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center text-green-500 font-medium group-hover:translate-x-2 transition-transform duration-300">
-                  <span>설정하기</span>
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* 크레딧 관리 섹션 */}
-          <div className="bg-gradient-to-br from-pink-50 to-purple-50 rounded-2xl p-8 max-w-4xl mx-auto">
-            <h3 className="text-2xl font-bold text-gray-800 mb-6 text-center">크레딧 관리</h3>
-            
-            {/* 잔액 및 사용량 정보 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              {/* 현재 잔액 */}
-              <div className="bg-white rounded-xl p-6 shadow-md">
-                <div className="flex items-center space-x-3 mb-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-rose-400 to-pink-500 rounded-lg flex items-center justify-center">
-                    <Wallet className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-800">현재 잔액</h4>
-                    <p className="text-sm text-gray-600">사용 가능한 크레딧</p>
-                  </div>
-                </div>
-                {dataLoading ? (
-                  <Skeleton className="h-8 w-24" />
-                ) : dataError ? (
-                  <p className="text-rose-500 text-sm">로딩 오류</p>
-                ) : (
-                  <div className="flex items-baseline space-x-2">
-                    <span className="text-2xl font-bold text-rose-600">
-                      {dashboardData.currentBalance.toLocaleString()}
-                    </span>
-                    <span className="text-gray-500">원</span>
-                  </div>
-                )}
-              </div>
-
-              {/* 이번 달 사용량 */}
-              <div className="bg-white rounded-xl p-6 shadow-md">
-                <div className="flex items-center space-x-3 mb-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-pink-400 to-purple-500 rounded-lg flex items-center justify-center">
-                    <TrendingUp className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-800">이번 달 사용량</h4>
-                    <p className="text-sm text-gray-600">크레딧 사용 내역</p>
-                  </div>
-                </div>
-                {dataLoading ? (
-                  <Skeleton className="h-8 w-20" />
-                ) : dataError ? (
-                  <p className="text-pink-500 text-sm">로딩 오류</p>
-                ) : (
-                  <div className="flex items-baseline space-x-2">
-                    <span className="text-2xl font-bold text-pink-600">
-                      {dashboardData.monthlyUsage.toLocaleString()}
-                    </span>
-                    <span className="text-gray-500">원</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* 관리 버튼 */}
-            <div className="text-center">
-              <Button
-                onClick={() => router.push("/payments/dashboard")}
-                className="bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white px-8 py-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-300"
-              >
-                <Wallet className="w-5 h-5 mr-2" />
-                자세한 크레딧 관리
-              </Button>
-            </div>
-          </div>
+        {/* CTA Buttons */}
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <Button
+            asChild
+            size="lg"
+            className="bg-primary-pink hover:bg-primary-pink/90 text-white rounded-full px-8 py-6 text-lg font-bold shadow-lg hover:shadow-xl transition-all duration-300"
+          >
+            <Link href="/course">
+              AI 코스 추천 시작하기 <ArrowRight className="w-5 h-5 ml-2" />
+            </Link>
+          </Button>
+          <Button
+            asChild
+            size="lg"
+            variant="outline"
+            className="rounded-full px-8 py-6 text-lg font-bold border-2 border-light-purple text-light-purple hover:bg-light-purple hover:text-white transition-all duration-300 bg-transparent"
+          >
+            <Link href="/community/courses">커뮤니티 코스 둘러보기</Link>
+          </Button>
         </div>
+
       </div>
     </div>
-  );
+  </section>
+)
+
+const FeaturesSection = () => {
+  const features = [
+    {
+      icon: <Bot className="w-8 h-8 text-primary-pink" />,
+      title: "AI 맞춤 추천",
+      description: "MBTI, 취향, 예산까지 고려한 완벽한 코스 설계",
+      bgColor: "bg-white",
+    },
+    {
+      icon: <MessageSquare className="w-8 h-8 text-light-purple" />,
+      title: "실시간 채팅",
+      description: "AI와 대화하며 실시간으로 코스를 조정하고 완성",
+      bgColor: "bg-white",
+    },
+    {
+      icon: <Users className="w-8 h-8 text-primary-pink" />,
+      title: "커뮤니티 마켓",
+      description: "실제 커플들이 검증한 리얼 후기 기반 코스 구매",
+      bgColor: "bg-white",
+    },
+  ]
+
+  return (
+    <section id="features" className="py-20 sm:py-32 bg-gray-50">
+      <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">왜 DayToCourse일까요?</h2>
+          <p className="text-lg text-text-secondary max-w-2xl mx-auto">
+            복잡한 계획은 AI에게 맡기고, 소중한 순간에만 집중하세요
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {features.map((feature, index) => (
+            <Card
+              key={index}
+              className={`border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 ${feature.bgColor}`}
+            >
+              <CardContent className="p-8 text-center">
+                <div className="mb-6 flex justify-center">
+                  <div className="w-16 h-16 bg-secondary-pink rounded-2xl flex items-center justify-center shadow-md">
+                    {feature.icon}
+                  </div>
+                </div>
+                <h3 className="text-xl font-bold text-text-primary mb-3">{feature.title}</h3>
+                <p className="text-text-secondary leading-relaxed">{feature.description}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+const TrustSection = () => {
+  const testimonials = [
+    {
+      text: "성수동 데이트 코스 추천받았는데 진짜 완벽했어요! 연인이 너무 좋아했어요 💕",
+      author: "김민지",
+      rating: 5,
+    },
+    {
+      text: "MBTI까지 고려해서 추천해주니까 우리 둘 다 만족하는 코스가 나왔어요",
+      author: "박준호",
+      rating: 5,
+    },
+    {
+      text: "비 오는 날 실내 데이트 코스 찾고 있었는데 AI가 딱 맞는 걸 추천해줬어요!",
+      author: "이서연",
+      rating: 5,
+    },
+  ]
+
+  return (
+    <section className="py-20 sm:py-32 bg-white">
+      <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">실제 사용자들의 후기</h2>
+          <p className="text-lg text-text-secondary">커플들이 직접 경험한 솔직한 후기</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {testimonials.map((testimonial, index) => (
+            <Card key={index} className="border border-gray-200 shadow-lg bg-white">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-1 mb-4">
+                  {[...Array(testimonial.rating)].map((_, i) => (
+                    <Star key={i} className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                  ))}
+                </div>
+                <p className="text-text-primary mb-4 leading-relaxed">"{testimonial.text}"</p>
+                <p className="text-sm font-semibold text-text-secondary">- {testimonial.author}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+const CommunityHighlightSection = () => {
+  const [popularCourses, setPopularCourses] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchPopularCourses = async () => {
+      try {
+        // API에서 인기 코스 3개 가져오기 (구매순 정렬)
+        const { getSharedCourses } = await import('@/lib/api')
+        const response = await getSharedCourses({ 
+          skip: 0, 
+          limit: 3, 
+          sort_by: 'purchase_count_desc' 
+        })
+        console.log('인기 코스 API 응답:', response)
+        console.log('첫 번째 코스 데이터:', response.courses?.[0])
+        setPopularCourses(response.courses || [])
+      } catch (error) {
+        console.error('인기 코스 로딩 실패:', error)
+        setPopularCourses([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchPopularCourses()
+  }, [])
+
+  return (
+    <section className="py-20 sm:py-32 bg-gray-50">
+      <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">인기 커뮤니티 코스</h2>
+          <p className="text-lg text-text-secondary">실제 커플들이 검증한 베스트 데이트 코스</p>
+        </div>
+
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[...Array(3)].map((_, index) => (
+              <Card key={index} className="border border-gray-200 shadow-lg bg-white">
+                <div className="h-48 bg-gray-200 animate-pulse"></div>
+                <CardContent className="p-6">
+                  <div className="h-4 bg-gray-200 rounded animate-pulse mb-2"></div>
+                  <div className="h-6 bg-gray-200 rounded animate-pulse mb-3"></div>
+                  <div className="flex gap-2">
+                    <div className="h-6 w-16 bg-gray-200 rounded-full animate-pulse"></div>
+                    <div className="h-6 w-20 bg-gray-200 rounded-full animate-pulse"></div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : popularCourses.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {popularCourses.map((course, index) => (
+              <Card
+                key={index}
+                className="border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden bg-white cursor-pointer"
+                onClick={() => window.location.href = `/community/courses/${course.id}`}
+              >
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-lg font-bold text-primary-pink">{course.price} day</span>
+                    <div className="flex items-center gap-1">
+                      <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                      <span className="text-sm font-semibold">
+                        {course.overall_rating ? course.overall_rating.toFixed(1) : '0.0'}
+                      </span>
+                      <span className="text-xs text-text-secondary">
+                        ({course.buyer_review_count || 0}개)
+                      </span>
+                    </div>
+                  </div>
+                  <h3 className="text-lg font-bold text-text-primary mb-3">{course.title}</h3>
+                  <p className="text-sm text-text-secondary mb-3 line-clamp-2">{course.description}</p>
+                  <div className="flex items-center justify-between text-xs text-text-secondary mb-3">
+                    <span>구매 {course.purchase_count || 0}회</span>
+                    <span>작성자: {course.creator_name || '익명'}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {course.categories?.map((category, tagIndex) => (
+                      <span key={tagIndex} className="px-3 py-1 bg-secondary-pink text-primary-pink text-sm rounded-full">
+                        #{category}
+                      </span>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <p className="text-text-secondary">아직 인기 코스가 없습니다.</p>
+          </div>
+        )}
+
+        <div className="text-center mt-12">
+          <Button
+            asChild
+            size="lg"
+            variant="outline"
+            className="rounded-full px-8 py-6 text-lg font-bold border-2 border-primary-pink text-primary-pink hover:bg-primary-pink hover:text-white transition-all duration-300 bg-transparent"
+          >
+            <Link href="/community/courses">
+              더 많은 코스 둘러보기 <ArrowRight className="w-5 h-5 ml-2" />
+            </Link>
+          </Button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+const FinalCTASection = () => {
+  const { user } = useAuth()
+  
+  // 로그인된 사용자는 CTA 섹션 표시하지 않음
+  if (user) {
+    return null
+  }
+  
+  return (
+    <section className="py-20 sm:py-32 bg-white">
+      <div className="container mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center">
+        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-6 text-primary-pink">지금 바로 시작해보세요!</h2>
+        <p className="text-xl mb-10 text-text-secondary">
+          회원가입하고 3,000 day를 받아보세요!
+          <br />
+          AI가 여러분만의 특별한 코스를 설계해드립니다.
+        </p>
+
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <Button
+            asChild
+            size="lg"
+            className="bg-primary-pink text-white hover:bg-primary-pink/90 rounded-full px-8 py-6 text-lg font-bold shadow-lg hover:shadow-xl transition-all duration-300"
+          >
+            <Link href="/login">
+              회원가입하고 3,000 day 받기 <ArrowRight className="w-5 h-5 ml-2" />
+            </Link>
+          </Button>
+        </div>
+
+        <p className="mt-6 text-sm text-text-secondary/75">회원가입 즉시 3,000 day 지급 • 카카오 간편 로그인</p>
+      </div>
+    </section>
+  )
+}
+
+export default function LandingPage() {
+  return (
+    <div className="bg-white">
+      <HeroSection />
+      <FeaturesSection />
+      <TrustSection />
+      <CommunityHighlightSection />
+      <FinalCTASection />
+    </div>
+  )
 }

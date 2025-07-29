@@ -21,6 +21,19 @@ export interface Place {
   updated_at?: string;
   average_rating?: number;  // 평균 평점
   review_count?: number;    // 리뷰 개수
+  
+  // 새 필드들 추가
+  business_hours?: Record<string, string>;
+  menu_info?: Array<{
+    name: string;
+    price: string; 
+    description: string;
+  }>;
+  homepage_url?: string;
+  kakao_category?: string;
+  major_category?: string;    // 대분류
+  middle_category?: string;   // 중분류
+  minor_category?: string;    // 소분류
 }
 
 export interface PlaceCategory {
@@ -46,6 +59,9 @@ export interface PlaceSearchParams {
   min_rating?: number;
   has_parking?: boolean;
   has_phone?: boolean;
+  major_category?: string;    // 새 파라미터
+  middle_category?: string;   // 새 파라미터
+  minor_category?: string;    // 새 파라미터
 }
 
 export interface PlaceFilters {
@@ -56,6 +72,8 @@ export interface PlaceFilters {
   minRating: number;
   hasParking: boolean;
   hasPhone: boolean;
+  middleCategory: string;   // 중분류 필터 추가
+  minorCategory: string;    // 소분류 필터 추가
 }
 
 // 정렬 옵션 타입

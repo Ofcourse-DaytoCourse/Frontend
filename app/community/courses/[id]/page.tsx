@@ -103,10 +103,15 @@ export default function SharedCourseDetailPage() {
     const userData = UserStorage.get();
     const userToken = TokenStorage.get();
     
-    // 로그인하지 않아도 조회 가능하도록 설정
+    // 로그인이 필요한 페이지로 변경
+    if (!userData || !userToken) {
+      router.replace('/login');
+      return;
+    }
+    
     setUser(userData);
     setToken(userToken);
-  }, [courseId]);
+  }, [courseId, router]);
 
   useEffect(() => {
     // token이 설정된 후에 API 호출 (token이 null이어도 조회 가능)
@@ -120,30 +125,8 @@ export default function SharedCourseDetailPage() {
       setLoading(true);
       const data = await getSharedCourseDetail(courseId, token || undefined);
       
-      // 백엔드 응답에 없는 필드들 기본값 설정
-      const courseWithDefaults = {
-        ...data,
-        creator_name: data.creator_name || '익명',
-        overall_rating: data.overall_rating || 0,
-        creator_rating: data.creator_rating || 0,
-        avg_buyer_rating: data.avg_buyer_rating || null,
-        buyer_review_count: data.buyer_review_count || 0,
-        course: data.course || { places: [] },
-        creator_review: data.creator_review || {
-          rating: 0,
-          review_text: '',
-          tags: [],
-          created_at: new Date().toISOString()
-        },
-        buyer_reviews: data.buyer_reviews || [],
-        purchase_status: data.purchase_status || {
-          is_purchased: false,
-          is_saved: false,
-          can_purchase: true
-        }
-      };
-      
-      setCourse(courseWithDefaults);
+      // 백엔드 데이터를 그대로 사용
+      setCourse(data);
     } catch (error) {
       console.error('공유 코스 상세 조회 실패:', error);
       toast.error('코스 정보를 불러올 수 없습니다.');
@@ -168,7 +151,7 @@ export default function SharedCourseDetailPage() {
       setPurchasing(true);
       await purchaseCourse(courseId, token);
       
-      toast.success('🎉 코스를 성공적으로 구매했습니다!\n300원이 차감되었습니다.');
+      toast.success('🎉 코스를 성공적으로 구매했습니다!\n300 day가 차감되었습니다.');
       
       // 구매 후 강제 새로고침으로 최신 상태 확실히 로드
       window.location.reload();
@@ -176,8 +159,8 @@ export default function SharedCourseDetailPage() {
     } catch (error: any) {
       console.error('구매 실패:', error);
       
-      if (error.message?.includes('잔액')) {
-        toast.error('잔액이 부족합니다. 크레딧을 충전해주세요.');
+      if (error.message?.includes('day')) {
+        toast.error('day가 부족합니다. day를 충전해주세요.');
       } else if (error.message?.includes('이미 구매')) {
         toast.error('이미 구매한 코스입니다.');
         // 이미 구매된 경우에도 새로고침
@@ -208,7 +191,7 @@ export default function SharedCourseDetailPage() {
       setSaving(true);
       await savePurchasedCourse(courseId, token);
       
-      toast.success('✅ 내 코스에 저장되었습니다!\n창작자에게 100원이 지급됩니다.');
+      toast.success('✅ 내 코스에 저장되었습니다!\n창작자에게 100 day가 지급됩니다.');
       
       // 저장 후 상태 업데이트
       setCourse(prev => prev ? {
@@ -258,12 +241,13 @@ export default function SharedCourseDetailPage() {
     });
   };
 
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-50 to-red-50 p-6 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">코스 정보를 불러오는 중...</p>
+      <div className="bg-gray-50 min-h-screen flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 mx-auto border-4 border-primary-pink border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-text-secondary">코스 정보를 불러오는 중...</p>
         </div>
       </div>
     );
@@ -271,35 +255,40 @@ export default function SharedCourseDetailPage() {
 
   if (!course) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-50 to-red-50 p-6 flex items-center justify-center">
+      <div className="bg-gray-50 min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <AlertCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-red-600 mb-2">코스를 찾을 수 없습니다</h3>
-          <p className="text-gray-500 mb-6">삭제되었거나 존재하지 않는 코스입니다.</p>
-          <Link href="/community/courses">
-            <Button>커뮤니티로 돌아가기</Button>
-          </Link>
+          <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-primary-pink to-light-purple rounded-full flex items-center justify-center">
+            <AlertCircle className="w-12 h-12 text-white" />
+          </div>
+          <h3 className="text-2xl font-bold text-text-primary mb-4">코스를 찾을 수 없습니다</h3>
+          <p className="text-text-secondary mb-8 max-w-md mx-auto">삭제되었거나 존재하지 않는 코스입니다.</p>
+          <Button asChild className="bg-primary-pink hover:bg-primary-pink/90 text-white rounded-full px-8 py-3">
+            <Link href="/community/courses">
+              커뮤니티로 돌아가기
+            </Link>
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 to-red-50 p-6">
-      <div className="max-w-6xl mx-auto">
+    <div className="bg-gray-50 min-h-screen">
+      <div className="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
         {/* 헤더 */}
-        <div className="flex items-center mb-6">
+        <div className="mb-8">
           <Button 
             variant="ghost" 
             onClick={() => router.back()}
-            className="mr-4"
+            className="mb-6 hover:bg-pink-50 rounded-full"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             돌아가기
           </Button>
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold text-gray-800">{course.title}</h1>
-            <div className="flex items-center mt-1 space-x-4 text-sm text-gray-600">
+          
+          <div className="text-center">
+            <h1 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">{course.title}</h1>
+            <div className="flex items-center justify-center gap-6 text-sm text-text-secondary">
               <div className="flex items-center">
                 <User className="w-4 h-4 mr-1" />
                 {course.creator_name}
@@ -320,103 +309,114 @@ export default function SharedCourseDetailPage() {
           {/* 메인 콘텐츠 */}
           <div className="lg:col-span-2">
             {/* 코스 정보 */}
-            <Card className="bg-white/80 backdrop-blur-sm mb-6">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-xl">{course.course.title}</CardTitle>
-                    <CardDescription className="mt-2">{course.description}</CardDescription>
-                  </div>
-                  <Badge className="bg-green-100 text-green-700 border-green-200 text-lg px-3 py-1">
-                    {course.price.toLocaleString()}원
-                  </Badge>
+            <Card className="border border-gray-200 shadow-lg rounded-2xl bg-white mb-6">
+              <CardHeader className="border-b border-gray-100">
+                <div>
+                  <CardDescription className="text-text-secondary mb-2">{course.description}</CardDescription>
                 </div>
               </CardHeader>
               
-              <CardContent>
+              <CardContent className="p-6">
                 {/* 평점 정보 */}
-                <div className="flex items-center justify-between mb-6 p-4 bg-yellow-50 rounded-lg">
+                <div className="flex items-center justify-between mb-6 p-4 bg-gradient-to-r from-pink-50 to-purple-50 rounded-2xl">
                   <div className="flex items-center">
                     <div className="flex items-center mr-3">
                       {renderStars(course.overall_rating)}
                     </div>
-                    <span className="text-lg font-semibold text-gray-800">
-                      {course.overall_rating.toFixed(1)}
+                    <span className="text-lg font-semibold text-text-primary">
+                      {course.overall_rating ? course.overall_rating.toFixed(1) : '0.0'}
                     </span>
-                    <span className="text-sm text-gray-500 ml-2">
+                    <span className="text-sm text-text-secondary ml-2">
                       (전체 평점)
                     </span>
                   </div>
                   
-                  <div className="text-sm text-gray-600 space-y-1">
-                    <div>창작자: ⭐ {course.creator_rating.toFixed(1)}</div>
+                  <div className="text-sm text-text-secondary space-y-1">
+                    <div>창작자: ⭐ {course.creator_rating ? course.creator_rating.toFixed(1) : '0.0'}</div>
                     {course.avg_buyer_rating && (
-                      <div>구매자: ⭐ {course.avg_buyer_rating.toFixed(1)} ({course.buyer_review_count}개)</div>
+                      <div>구매자: ⭐ {course.avg_buyer_rating ? course.avg_buyer_rating.toFixed(1) : '0.0'} ({course.buyer_review_count || 0}개)</div>
                     )}
                   </div>
                 </div>
 
-                {/* 장소 목록 */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">📍 코스 일정</h3>
-                  {course.course.places.map((place, index) => (
-                    <div key={index} className="border-l-4 border-pink-200 pl-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center mb-2">
-                            <Badge variant="secondary" className="mr-2 bg-pink-100 text-pink-700">
-                              {place.sequence}
-                            </Badge>
-                            <h4 className="font-medium text-gray-800">{place.name}</h4>
-                          </div>
-                          
-                          <div className="space-y-1 text-sm text-gray-600 ml-8">
-                            <div className="flex items-center">
-                              <MapPin className="w-4 h-4 mr-1" />
-                              {place.address}
-                            </div>
-                            
-                            {/* 장소 설명들 */}
-                            <div className="space-y-3 mt-3">
-                              {place.summary && (
-                                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 p-3 rounded-lg border border-blue-100">
-                                  <p className="font-semibold text-blue-800 text-sm mb-1">장소 소개</p>
-                                  <p className="text-blue-700 text-sm leading-relaxed">{place.summary}</p>
-                                </div>
-                              )}
-                              
-                              {place.description && place.description.trim() && (
-                                <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-3 rounded-lg border border-green-100">
-                                  <p className="font-semibold text-green-800 text-sm mb-1">상세 정보</p>
-                                  <p className="text-green-700 text-sm leading-relaxed">{place.description}</p>
-                                </div>
-                              )}
-                            </div>
-                            
-                            {/* 카카오맵 링크 */}
-                            <div className="mt-3">
-                              {place.kakao_url && (
-                                <a 
-                                  href={place.kakao_url} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-yellow-500 hover:bg-yellow-600 rounded-lg transition-colors"
-                                >
-                                  <MapPin className="w-4 h-4 mr-1" />
-                                  카카오맵으로 보기
-                                </a>
-                              )}
-                            </div>
+                {/* 장소 목록 - 구매한 사용자 또는 자신이 올린 코스인 경우 볼 수 있음 */}
+                {(course.purchase_status.is_purchased || !course.purchase_status.can_purchase) ? (
+                  <div className="space-y-6">
+                    <h3 className="text-xl font-bold text-text-primary mb-6 flex items-center">
+                      <MapPin className="w-6 h-6 mr-2 text-primary-pink" />
+                      코스 일정
+                    </h3>
+                    {(course.course.places || []).map((place, index) => (
+                    <div key={index} className="relative">
+                      {index < (course.course.places || []).length - 1 && (
+                        <div className="absolute left-6 top-14 bottom-0 w-0.5 bg-gray-200"></div>
+                      )}
+                      <div className="flex gap-4">
+                        <div className="flex-shrink-0">
+                          <div className="w-12 h-12 bg-primary-pink rounded-full flex items-center justify-center text-white font-bold shadow-lg">
+                            {place.sequence}
                           </div>
                         </div>
-                        
-                        <Badge className="bg-blue-100 text-blue-700 border-blue-200">
-                          {place.category}
-                        </Badge>
+                        <div className="flex-1 bg-white rounded-2xl p-6 shadow-md border border-gray-100">
+                          <div className="flex items-start justify-between mb-3">
+                            <h4 className="text-lg font-bold text-text-primary">{place.name}</h4>
+                            <Badge className="bg-secondary-pink text-primary-pink rounded-full">
+                              {place.category}
+                            </Badge>
+                          </div>
+                          
+                          <div className="flex items-center text-sm text-text-secondary mb-4">
+                            <MapPin className="w-4 h-4 mr-1" />
+                            {place.address}
+                          </div>
+                            
+                          {/* 장소 설명들 */}
+                          {place.summary && (
+                            <div className="bg-gray-50 p-4 rounded-xl mb-3">
+                              <p className="text-sm text-text-secondary leading-relaxed">{place.summary}</p>
+                            </div>
+                          )}
+                          
+                          {place.description && place.description.trim() && (
+                            <div className="bg-secondary-pink p-4 rounded-xl mb-3">
+                              <p className="text-sm text-primary-pink leading-relaxed">{place.description}</p>
+                            </div>
+                          )}
+                          
+                          {/* 카카오맵 링크 */}
+                          {place.kakao_url && (
+                            <a 
+                              href={place.kakao_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-primary-pink hover:bg-primary-pink/90 rounded-full transition-colors"
+                            >
+                              <MapPin className="w-4 h-4 mr-1" />
+                              카카오맵으로 보기
+                            </a>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <h3 className="text-xl font-bold text-text-primary mb-6 flex items-center">
+                      <MapPin className="w-6 h-6 mr-2 text-primary-pink" />
+                      코스 일정
+                    </h3>
+                    <div className="bg-gray-100 rounded-2xl p-8 text-center">
+                      <div className="w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <AlertCircle className="w-8 h-8 text-gray-500" />
+                      </div>
+                      <h4 className="text-lg font-bold text-gray-700 mb-2">구매 후 이용 가능</h4>
+                      <p className="text-gray-600">
+                        코스 일정은 구매한 후에 확인할 수 있습니다.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -490,76 +490,76 @@ export default function SharedCourseDetailPage() {
           {/* 사이드바 */}
           <div className="lg:col-span-1">
             {/* 구매/저장 카드 */}
-            <Card className="bg-white/80 backdrop-blur-sm sticky top-6 mb-6">
-              <CardHeader>
-                <CardTitle className="text-lg">구매 정보</CardTitle>
+            <Card className="border border-gray-200 shadow-lg rounded-2xl bg-white sticky top-6 mb-6">
+              <CardHeader className="border-b border-gray-100">
+                <CardTitle className="text-xl font-bold text-text-primary">구매 정보</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="p-6 space-y-6">
                 <div className="text-center">
-                  <div className="text-3xl font-bold text-green-600 mb-2">
-                    {course.price.toLocaleString()}원
+                  <div className="text-4xl font-bold text-primary-pink mb-2">
+                    {course.price.toLocaleString()} day
                   </div>
-                  <p className="text-sm text-gray-600">
-                    구매 후 후기 작성 시 300원 환급
+                  <p className="text-sm text-text-secondary">
+                    구매 후 후기 작성 시 300 day 환급
                   </p>
                 </div>
 
-                <Separator />
-
-                {/* 구매 상태에 따른 버튼 */}
-                {!course.purchase_status.is_purchased ? (
-                  <Button 
-                    className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
-                    size="lg"
-                    onClick={handlePurchase}
-                    disabled={purchasing || !course.purchase_status.can_purchase}
-                  >
-                    {purchasing ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        구매하는 중...
-                      </>
-                    ) : (
-                      <>
-                        <ShoppingCart className="w-4 h-4 mr-2" />
-                        {course.purchase_status.can_purchase ? '구매하기' : '구매 불가'}
-                      </>
-                    )}
-                  </Button>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-center text-green-600 font-medium">
-                      <CheckCircle className="w-5 h-5 mr-2" />
-                      구매 완료
-                    </div>
-                    
-                    {!course.purchase_status.is_saved ? (
-                      <Button 
-                        className="w-full bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600"
-                        size="lg"
-                        onClick={handleSave}
-                        disabled={saving}
-                      >
-                        {saving ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                            저장하는 중...
-                          </>
-                        ) : (
-                          <>
-                            <Heart className="w-4 h-4 mr-2" />
-                            내 코스에 저장하기
-                          </>
-                        )}
-                      </Button>
-                    ) : (
-                      <div className="flex items-center justify-center text-pink-600 font-medium">
-                        <Heart className="w-5 h-5 mr-2" />
-                        저장 완료
+                <div className="border-t border-gray-100 pt-6">
+                  {/* 구매 상태에 따른 버튼 */}
+                  {!course.purchase_status.is_purchased ? (
+                    <Button 
+                      className="w-full bg-primary-pink hover:bg-primary-pink/90 text-white rounded-full py-6 text-lg font-bold shadow-lg hover:shadow-xl transition-all duration-300"
+                      size="lg"
+                      onClick={handlePurchase}
+                      disabled={purchasing || !course.purchase_status.can_purchase}
+                    >
+                      {purchasing ? (
+                        <>
+                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                          구매하는 중...
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingCart className="w-5 h-5 mr-2" />
+                          {course.purchase_status.can_purchase ? '지금 구매하기' : '구매 불가'}
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-center text-primary-pink font-bold text-lg p-4 bg-green-50 rounded-full">
+                        <CheckCircle className="w-6 h-6 mr-2" />
+                        구매 완료
                       </div>
-                    )}
-                  </div>
-                )}
+                      
+                      {!course.purchase_status.is_saved ? (
+                        <Button 
+                          className="w-full bg-light-purple hover:bg-light-purple/90 text-white rounded-full py-6 text-lg font-bold shadow-lg hover:shadow-xl transition-all duration-300"
+                          size="lg"
+                          onClick={handleSave}
+                          disabled={saving}
+                        >
+                          {saving ? (
+                            <>
+                              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                              저장하는 중...
+                            </>
+                          ) : (
+                            <>
+                              <Heart className="w-5 h-5 mr-2" />
+                              내 코스에 저장하기
+                            </>
+                          )}
+                        </Button>
+                      ) : (
+                        <div className="flex items-center justify-center text-primary-pink font-bold text-lg p-4 bg-pink-50 rounded-full">
+                          <Heart className="w-6 h-6 mr-2 fill-current" />
+                          저장 완료
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 <div className="text-xs text-gray-500 text-center pt-2">
                   * 구매한 코스는 내 코스 목록에서 확인 가능합니다
@@ -579,7 +579,7 @@ export default function SharedCourseDetailPage() {
                       <Eye className="w-4 h-4 mr-2 text-gray-500" />
                       조회수
                     </div>
-                    <span className="font-medium">{course.view_count.toLocaleString()}</span>
+                    <span className="font-medium">{course.view_count}</span>
                   </div>
                   
                   <div className="flex items-center justify-between">
@@ -587,7 +587,7 @@ export default function SharedCourseDetailPage() {
                       <ShoppingCart className="w-4 h-4 mr-2 text-green-500" />
                       구매수
                     </div>
-                    <span className="font-medium">{course.purchase_count.toLocaleString()}</span>
+                    <span className="font-medium">{course.purchase_count}</span>
                   </div>
                   
                   <div className="flex items-center justify-between">
@@ -595,7 +595,7 @@ export default function SharedCourseDetailPage() {
                       <Heart className="w-4 h-4 mr-2 text-pink-500" />
                       저장수
                     </div>
-                    <span className="font-medium">{course.save_count.toLocaleString()}</span>
+                    <span className="font-medium">{course.save_count}</span>
                   </div>
                 </div>
               </CardContent>

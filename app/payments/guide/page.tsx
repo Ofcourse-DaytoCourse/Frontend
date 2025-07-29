@@ -13,8 +13,9 @@ export default function PaymentGuidePage() {
   const router = useRouter();
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [refundPolicyAccepted, setRefundPolicyAccepted] = useState(false);
 
-  const isChargeReady = termsAccepted && privacyAccepted;
+  const isChargeReady = termsAccepted && privacyAccepted && refundPolicyAccepted;
 
   const handleChargeClick = () => {
     if (!isChargeReady) return;
@@ -25,7 +26,7 @@ export default function PaymentGuidePage() {
     <div className="p-6 space-y-6">
       {/* 헤더 */}
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">서비스 크레딧 충전</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">서비스 day 충전</h1>
         <p className="text-gray-600">안전하고 간편한 충전 서비스를 이용해보세요</p>
       </div>
 
@@ -34,7 +35,7 @@ export default function PaymentGuidePage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <CreditCard className="h-5 w-5" />
-            크레딧 사용법
+            day 사용법
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -42,10 +43,9 @@ export default function PaymentGuidePage() {
             <div>
               <h3 className="font-semibold text-gray-900 mb-2">💰 충전 방법</h3>
               <ul className="text-sm text-gray-600 space-y-1">
-                <li>• 원하는 금액을 입력하고 충전 요청</li>
                 <li>• 고유 입금자명과 계좌번호 발급</li>
                 <li>• 1시간 내 해당 계좌로 입금</li>
-                <li>• 자동으로 크레딧 충전 완료</li>
+                <li>• 자동으로 day 충전 완료</li>
               </ul>
             </div>
             <div>
@@ -54,7 +54,6 @@ export default function PaymentGuidePage() {
                 <li>• 서비스 이용 시 자동으로 차감</li>
                 <li>• 실시간 잔액 확인 가능</li>
                 <li>• 사용 내역 상세 조회</li>
-                <li>• 환불 신청 언제든 가능</li>
               </ul>
             </div>
           </div>
@@ -83,7 +82,7 @@ export default function PaymentGuidePage() {
               <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
                 <span className="text-blue-600 font-bold">2</span>
               </div>
-              <p className="text-sm font-medium">계좌 정보 발급</p>
+              <p className="text-sm font-medium">입금자명 생성</p>
               <p className="text-xs text-gray-500">입금자명 생성</p>
             </div>
             <div className="hidden md:block text-gray-300">→</div>
@@ -119,18 +118,19 @@ export default function PaymentGuidePage() {
             <div>
               <h3 className="font-semibold text-gray-900 mb-2">✅ 환불 가능</h3>
               <ul className="text-sm text-gray-600 space-y-1">
-                <li>• 사용하지 않은 크레딧</li>
+                <li>• 사용하지 않은 day</li>
                 <li>• 부분 환불 지원</li>
                 <li>• 관리자 승인 후 처리</li>
-                <li>• 영업일 기준 3-5일 소요</li>
+                <li>• 영업일 기준 7일 이내 처리</li>
               </ul>
             </div>
             <div>
               <h3 className="font-semibold text-gray-900 mb-2">❌ 환불 불가</h3>
               <ul className="text-sm text-gray-600 space-y-1">
-                <li>• 이미 사용된 크레딧</li>
-                <li>• 보너스로 지급된 크레딧</li>
+                <li>• 이미 사용된 day</li>
+                <li>• 보너스로 지급된 day</li>
                 <li>• 30일 경과된 충전건</li>
+                <li>• 회원 탈퇴시 모든 day도 함께 삭제</li>
                 <li>• 부정 사용이 확인된 경우</li>
               </ul>
             </div>
@@ -145,6 +145,7 @@ export default function PaymentGuidePage() {
           <strong>중요 안내:</strong> 
           입금자명을 정확히 입력해주세요. 잘못 입력 시 수동 처리가 필요하며 시간이 지연될 수 있습니다.
           충전 요청 후 1시간 내 입금하지 않으면 요청이 만료됩니다.
+          개인정보는 전자금융거래법에 따라 5년간 보관되며, 서비스 탈퇴 시 지체없이 파기됩니다.
         </AlertDescription>
       </Alert>
 
@@ -159,7 +160,7 @@ export default function PaymentGuidePage() {
                 onCheckedChange={(checked) => setTermsAccepted(checked as boolean)}
               />
               <label htmlFor="terms" className="text-sm">
-                <a href="#" className="text-blue-600 hover:underline">이용약관</a>에 동의합니다 (필수)
+                <a href="/terms" className="text-blue-600 hover:underline">이용약관</a> 및 <a href="/financial-terms" className="text-blue-600 hover:underline">전자금융거래 이용약관</a>에 동의합니다 (필수)
               </label>
             </div>
             <div className="flex items-center space-x-2">
@@ -169,8 +170,21 @@ export default function PaymentGuidePage() {
                 onCheckedChange={(checked) => setPrivacyAccepted(checked as boolean)}
               />
               <label htmlFor="privacy" className="text-sm">
-                <a href="#" className="text-blue-600 hover:underline">개인정보처리방침</a>에 동의합니다 (필수)
+                <a href="/privacy" className="text-blue-600 hover:underline">개인정보처리방침</a>에 동의합니다 (필수)
               </label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="refund-policy" 
+                checked={refundPolicyAccepted}
+                onCheckedChange={(checked) => setRefundPolicyAccepted(checked as boolean)}
+              />
+              <label htmlFor="refund-policy" className="text-sm">
+                <a href="/refund-policy" className="text-blue-600 hover:underline">환불 정책</a>에 동의합니다 (필수)
+              </label>
+            </div>
+            <div className="text-xs text-gray-500 mt-2">
+              분쟁 발생 시 금융감독원 금융분쟁조정위원회(1332) 또는 소비자분쟁조정위원회(1372)에 조정을 신청할 수 있습니다.
             </div>
           </div>
         </CardContent>

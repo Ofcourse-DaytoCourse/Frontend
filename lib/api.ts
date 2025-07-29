@@ -123,6 +123,14 @@ export const getCourses = (user_id: number, token: string): Promise<{ courses: C
   return api(`/courses/list?${queryParams}`, "GET", undefined, token);
 };
 
+// 구매한 공유 코스 목록 조회
+export const getMyPurchasedCourses = (token: string): Promise<any> =>
+  api("/shared_courses/my/purchased", "GET", undefined, token);
+
+// 내가 생성한 공유 코스 목록 조회
+export const getMyCreatedSharedCourses = (token: string): Promise<any> =>
+  api("/shared_courses/my/created", "GET", undefined, token);
+
 // 11. 코스 상세 조회 (나만보는)
 export const getCourseDetail = (params: { user_id: number; course_id: number }, token: string): Promise<{ course: Course }> => {
   const queryParams = new URLSearchParams({

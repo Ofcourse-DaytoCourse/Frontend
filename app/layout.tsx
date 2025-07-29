@@ -4,7 +4,7 @@ import { Inter } from "next/font/google"
 import { AuthProvider } from "@/contexts/auth-context"
 import { ThemeProvider } from "@/contexts/theme-context"
 import { AuthGuard } from "@/components/auth-guard"
-import { GlobalMenu } from "@/components/sidebar"
+import { ConditionalLayout } from "@/components/conditional-layout"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
@@ -26,9 +26,9 @@ export default function RootLayout({
         <ThemeProvider>
           <AuthProvider>
             <AuthGuard>
-              <GlobalMenu>
-                <div className="min-h-screen bg-background">{children}</div>
-              </GlobalMenu>
+              <ConditionalLayout>
+                {children}
+              </ConditionalLayout>
             </AuthGuard>
           </AuthProvider>
         </ThemeProvider>

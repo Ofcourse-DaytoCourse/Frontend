@@ -149,7 +149,7 @@ export default function RefundNewPage() {
       if (refundForm.refund_amount > refundAvailable.refundable_amount) {
         toast({
           title: "금액 초과",
-          description: `환불 가능 금액(${refundAvailable.refundable_amount.toLocaleString()}원)을 초과했습니다.`,
+          description: `환불 가능 금액(${refundAvailable.refundable_amount.toLocaleString()} day)을 초과했습니다.`,
           variant: "destructive",
         });
         return;
@@ -222,7 +222,7 @@ export default function RefundNewPage() {
           뒤로가기
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">크레딧 환불</h1>
+          <h1 className="text-2xl font-bold">day 환불</h1>
           <p className="text-gray-600">환불 신청 및 내역을 관리하세요</p>
         </div>
       </div>
@@ -257,12 +257,12 @@ export default function RefundNewPage() {
                   <div className="flex justify-between items-center">
                     <span>환불 가능 금액:</span>
                     <span className="text-2xl font-bold text-green-600">
-                      {refundAvailable.refundable_amount.toLocaleString()}원
+                      {refundAvailable.refundable_amount.toLocaleString()} day
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-sm text-gray-600">
                     <span>전체 잔액:</span>
-                    <span>{refundAvailable.total_balance.toLocaleString()}원</span>
+                    <span>{refundAvailable.total_balance.toLocaleString()} day</span>
                   </div>
                   {!refundAvailable.can_request_refund && (
                     <Alert>
@@ -305,7 +305,7 @@ export default function RefundNewPage() {
                     max={refundAvailable.refundable_amount}
                   />
                   <p className="text-sm text-gray-500 mt-1">
-                    최소 환불 금액: 1,000원 / 최대 환불 가능 금액: {refundAvailable.refundable_amount.toLocaleString()}원
+                    최소 환불 금액: 1,000 day / 최대 환불 가능 금액: {refundAvailable.refundable_amount.toLocaleString()} day
                   </p>
                 </div>
 
@@ -453,7 +453,7 @@ export default function RefundNewPage() {
                     <div className="flex items-center justify-between mb-3">
                       <div>
                         <p className="font-medium">
-                          {request.refund_amount.toLocaleString()}원 환불
+                          {request.refund_amount.toLocaleString()} day 환불
                         </p>
                         <p className="text-sm text-gray-600">
                           {request.bank_name} {request.account_number}

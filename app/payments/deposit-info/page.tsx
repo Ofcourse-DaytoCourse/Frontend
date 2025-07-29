@@ -177,7 +177,7 @@ export default function DepositInfoPage() {
           <div className="bg-blue-50 p-4 rounded-lg">
             <p className="text-sm text-gray-600 mb-1">입금 안내</p>
             <p className="text-lg font-medium text-blue-600">
-              원하는 금액만큼 입금하시면 자동으로 충전됩니다
+              원하는 금액만큼 입금하시면 자동으로 day가 충전됩니다
             </p>
           </div>
 
@@ -261,7 +261,7 @@ export default function DepositInfoPage() {
             <div>
               <p className="font-medium text-green-800 mb-1">입금 완료 후</p>
               <p className="text-sm text-green-700">
-                입금이 완료되면 보통 5-10분 내에 자동으로 크레딧이 충전됩니다. 
+                입금이 완료되면 보통 5-10분 내에 자동으로 day가 충전됩니다. 
                 "입금 확인하러 가기" 버튼을 눌러 잔액을 확인해보세요.
               </p>
             </div>

@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, Mail } from "lucide-react"
 
 export default function FAQPage() {
-  const developerEmail = "sknplaydata@gmail.com"
+  const developerEmail = "junehoo4248@naver.com"
 
   return (
     <div className="min-h-screen bg-gray-50">

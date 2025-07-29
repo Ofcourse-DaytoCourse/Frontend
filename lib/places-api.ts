@@ -29,6 +29,9 @@ export const getPlaces = async (params: PlaceSearchParams = {}): Promise<PlaceLi
   if (params.min_rating !== undefined) searchParams.append('min_rating', params.min_rating.toString());
   if (params.has_parking !== undefined) searchParams.append('has_parking', params.has_parking.toString());
   if (params.has_phone !== undefined) searchParams.append('has_phone', params.has_phone.toString());
+  if (params.major_category) searchParams.append('major_category', params.major_category);
+  if (params.middle_category) searchParams.append('middle_category', params.middle_category);
+  if (params.minor_category) searchParams.append('minor_category', params.minor_category);
 
   const queryString = searchParams.toString();
   const url = `/places/${queryString ? `?${queryString}` : ''}`;
@@ -80,6 +83,15 @@ export const getPlacesByCategory = async (
   return getPlaces({ category_id: categoryId, skip, limit });
 };
 
+// 카테고리별 조회 함수 추가
+export const getPlacesByHierarchyCategory = async (
+  major?: string,
+  middle?: string, 
+  minor?: string
+): Promise<PlaceListResponse> => {
+  return getPlaces({ major_category: major, middle_category: middle, minor_category: minor });
+};
+
 // 지역별 장소 조회  
 export const getPlacesByRegion = async (
   region: string,
@@ -97,4 +109,22 @@ export const aiSearchPlaces = async (params: AISearchRequest, token: string): Pr
 // 사용자 잔액 조회 (AI 검색 비용 확인용)  
 export const getUserBalance = async (token: string): Promise<{ balance: number }> => {
   return api("/api/v1/payments/balance", "GET", undefined, token);
+};
+
+// 카테고리 목록 조회 API들
+export const getMajorCategories = async (): Promise<{ categories: string[] }> => {
+  return api("/places/categories/major", "GET");
+};
+
+export const getMiddleCategories = async (majorCategory?: string): Promise<{ categories: string[] }> => {
+  const params = majorCategory ? `?major_category=${encodeURIComponent(majorCategory)}` : '';
+  return api(`/places/categories/middle${params}`, "GET");
+};
+
+export const getMinorCategories = async (majorCategory?: string, middleCategory?: string): Promise<{ categories: string[] }> => {
+  const params = new URLSearchParams();
+  if (majorCategory) params.append('major_category', majorCategory);
+  if (middleCategory) params.append('middle_category', middleCategory);
+  const queryString = params.toString() ? `?${params.toString()}` : '';
+  return api(`/places/categories/minor${queryString}`, "GET");
 };

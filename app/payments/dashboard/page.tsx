@@ -58,9 +58,9 @@ export default function PaymentDashboardPage() {
   const formatCurrency = (amount: number) => {
     console.log('DEBUG formatCurrency amount:', amount, typeof amount);
     if (amount === undefined || amount === null) {
-      return "0원";
+      return "0 day";
     }
-    return amount.toLocaleString() + "원";
+    return amount.toLocaleString() + " day";
   };
 
   const getTransactionIcon = (type: 'charge' | 'usage') => {
@@ -142,10 +142,10 @@ export default function PaymentDashboardPage() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-blue-600 mb-2">
-              {balance ? formatCurrency(balance.total_balance) : "0원"}
+              {balance ? formatCurrency(balance.total_balance) : "0 day"}
             </p>
             <p className="text-sm text-gray-600">
-              사용 가능한 크레딧
+              사용 가능한 day
             </p>
           </CardContent>
         </Card>
@@ -160,7 +160,7 @@ export default function PaymentDashboardPage() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-green-600 mb-2">
-              {balance ? formatCurrency(balance.refundable_balance) : "0원"}
+              {balance ? formatCurrency(balance.refundable_balance) : "0 day"}
             </p>
             <p className="text-sm text-gray-600">
               환불 신청 가능한 금액
@@ -178,10 +178,10 @@ export default function PaymentDashboardPage() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-gray-600 mb-2">
-              {balance ? formatCurrency(balance.non_refundable_balance) : "0원"}
+              {balance ? formatCurrency(balance.non_refundable_balance) : "0 day"}
             </p>
             <p className="text-sm text-gray-600">
-              보너스 및 사용된 크레딧
+              보너스 및 사용된 day
             </p>
           </CardContent>
         </Card>

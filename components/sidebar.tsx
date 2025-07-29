@@ -51,8 +51,7 @@ export function GlobalMenu({ children }: GlobalMenuProps) {
 
   const menuItems = [
     { href: "/payments/guide", label: "충전하기", icon: CreditCard },
-    { href: "/payments/dashboard", label: "잔액 확인", icon: DollarSign },
-    { href: "/list", label: "저장된 코스", icon: List },
+    { href: "/payments/dashboard", label: "day 확인", icon: DollarSign },
     { href: "/shared", label: "공유된 코스", icon: Share2 },
     { href: "/mypage", label: "마이페이지", icon: User },
   ]
@@ -157,7 +156,7 @@ export function GlobalMenu({ children }: GlobalMenuProps) {
                     <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-full flex items-center justify-center shadow-lg">
                       <DollarSign className="h-4 w-4 text-white" />
                     </div>
-                    <span className="font-bold text-blue-800">보유 포인트</span>
+                    <span className="font-bold text-blue-800">보유</span>
                   </div>
                   <div>
                     {isBalanceLoading ? (
@@ -170,7 +169,7 @@ export function GlobalMenu({ children }: GlobalMenuProps) {
                     ) : balance ? (
                       <div className="flex items-center justify-between">
                         <span className="text-2xl font-black text-blue-900">
-                          {balance.total_balance.toLocaleString()}원
+                          {balance.total_balance.toLocaleString()} day
                         </span>
                         <div className="flex items-center gap-1">
                           {[...Array(5)].map((_, i) => (

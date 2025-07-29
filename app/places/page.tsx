@@ -17,24 +17,43 @@ import {
   Star,
   ChevronRight,
   Heart,
-  Loader2
+  Loader2,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
-import { getPlaces, getPlaceCategories, searchPlaces, getPlaceReviews, aiSearchPlaces } from "@/lib/places-api";
+import { getPlaces, searchPlaces, getPlaceReviews, aiSearchPlaces, getMajorCategories, getMiddleCategories, getMinorCategories } from "@/lib/places-api";
 import { paymentsApi } from "@/lib/payments-api";
-import type { Place, PlaceCategory, PlaceFilters } from "@/types/places";
+import type { Place, PlaceFilters } from "@/types/places";
 import { SEOUL_DISTRICTS } from "@/types/places";
 import type { AISearchRequest, AISearchResponse } from "@/lib/places-api";
 import { toast } from "sonner";
 import { useBalanceData } from "@/hooks/use-balance-data";
-import { TokenStorage } from "@/lib/storage";
+import { TokenStorage, UserStorage } from "@/lib/storage";
 
 export default function PlacesPage() {
   const router = useRouter();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   
+  // 현재 사용자 정보 가져오기
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  
+  useEffect(() => {
+    const user = UserStorage.get();
+    setCurrentUser(user);
+  }, []);
+
+  // 사용자별 localStorage 키 생성 함수
+  const getUserStorageKey = (key: string) => {
+    return currentUser ? `${key}_${currentUser.user_id}` : key;
+  };
+  
   const [places, setPlaces] = useState<Place[]>([]);
-  const [categories, setCategories] = useState<PlaceCategory[]>([]);
+  
+  // 카테고리 상태들 (동적 로드)
+  const [majorCategories, setMajorCategories] = useState<string[]>([]);
+  const [middleCategories, setMiddleCategories] = useState<string[]>([]);
+  const [minorCategories, setMinorCategories] = useState<string[]>([]);
   const [filters, setFilters] = useState<PlaceFilters>(() => {
     // localStorage에서 필터 상태 복원
     if (typeof window !== 'undefined') {
@@ -59,7 +78,11 @@ export default function PlacesPage() {
       sortBy: 'review_count_desc',
       minRating: 0,
       hasParking: false,
-      hasPhone: false
+      hasPhone: false,
+      middleCategory: 'all',
+      minorCategory: 'all',
+      middleCategory: 'all',
+      minorCategory: 'all'
     };
   });
   
@@ -87,44 +110,55 @@ export default function PlacesPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [pagination, setPagination] = useState({ page: 1, limit: 20 });
+  const [pagination, setPagination] = useState({ page: 1, limit: 21 });
   const [totalCount, setTotalCount] = useState(0);
 
-  // AI 검색 관련 상태 (localStorage에서 초기값 복원)
-  const [aiSearchResults, setAiSearchResults] = useState<Place[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('ai-search-results');
-        return saved ? JSON.parse(saved) : [];
-      } catch { return []; }
-    }
-    return [];
-  });
+  // AI 검색 관련 상태 (사용자별로 분리)
+  const [aiSearchResults, setAiSearchResults] = useState<Place[]>([]);
   const [isAiSearching, setIsAiSearching] = useState(false);
-  const [showAiResults, setShowAiResults] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('show-ai-results') === 'true';
-    }
-    return false;
-  });
+  const [showAiResults, setShowAiResults] = useState(false);
   const [aiSearchError, setAiSearchError] = useState<string | null>(null);
-  const [aiSearchForm, setAiSearchForm] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('ai-search-form');
-        return saved ? JSON.parse(saved) : { description: '', district: '', category: '전체' };
-      } catch { return { description: '', district: '', category: '전체' }; }
-    }
-    return { description: '', district: '', category: '전체' };
+  const [aiSearchForm, setAiSearchForm] = useState({ 
+    description: '', 
+    district: '전체', 
+    major_category: '전체',
+    middle_category: '전체', 
+    minor_category: '전체'
   });
-  // 기존 useState 대신 useBalanceData 훅 사용
-  const { balance } = useBalanceData(false);
+  // 기존 useState 대신 useBalanceData 훅 사용 (실시간 업데이트 활성화)
+  const { balance, refreshBalance } = useBalanceData(true, 30);
+  
+  // AI 검색 섹션 토글 상태 (기본적으로 닫혀있음)
+  const [isAiSearchOpen, setIsAiSearchOpen] = useState(false);
 
   // 검색 결과 표시 제어
   const displayPlaces = showAiResults ? aiSearchResults : places;
   const searchResultTitle = showAiResults 
     ? `AI 검색 결과 (${aiSearchResults.length}개)` 
     : `일반 검색 결과 (${places.length}개)`;
+
+  // 사용자별 AI 검색 데이터 로드
+  useEffect(() => {
+    if (currentUser && typeof window !== 'undefined') {
+      try {
+        const savedResults = localStorage.getItem(getUserStorageKey('ai-search-results'));
+        const savedShowResults = localStorage.getItem(getUserStorageKey('show-ai-results'));
+        const savedForm = localStorage.getItem(getUserStorageKey('ai-search-form'));
+        
+        if (savedResults) {
+          setAiSearchResults(JSON.parse(savedResults));
+        }
+        if (savedShowResults) {
+          setShowAiResults(savedShowResults === 'true');
+        }
+        if (savedForm) {
+          setAiSearchForm(JSON.parse(savedForm));
+        }
+      } catch (error) {
+        console.error('AI 검색 데이터 로드 실패:', error);
+      }
+    }
+  }, [currentUser]);
 
   // 컴포넌트 마운트 시 초기 데이터 로드
   useEffect(() => {
@@ -142,17 +176,13 @@ export default function PlacesPage() {
       }
     }
     
-    if (categories.length > 0) { // 카테고리가 로드된 후에만 실행
-      setPagination(prev => ({ ...prev, page: 1 })); // 필터 변경시 1페이지로
-      loadPlaces(true); // 필터 변경 시 데이터 다시 로드
-    }
+    setPagination(prev => ({ ...prev, page: 1 })); // 필터 변경시 1페이지로
+    loadPlaces(true); // 필터 변경 시 데이터 다시 로드
   }, [filters]);
   
   // 페이지네이션 변경 시 데이터 로드
   useEffect(() => {
-    if (categories.length > 0) { // 카테고리가 로드된 후에만 실행
-      loadPlaces(true);
-    }
+    loadPlaces(true);
   }, [pagination.page]);
 
   // 디바운싱된 검색어 추천
@@ -194,16 +224,29 @@ export default function PlacesPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // 컴포넌트 언마운트시 메모리 정리
+  useEffect(() => {
+    return () => {
+      // 상태 초기화
+      setSearchSuggestions([]);
+      setAiSearchResults([]);
+      setPlaces([]);
+      // 타이머나 인터벌 정리는 useBalanceData 훅에서 자동 처리됨
+    };
+  }, []);
+
   const loadInitialData = async () => {
     try {
       setLoading(true);
-      const [categoriesData] = await Promise.all([
-        getPlaceCategories()
-      ]);
-      setCategories(categoriesData);
       setPagination(prev => ({ ...prev, page: 1 })); // 초기 로드시 1페이지로
       
-      // useBalanceData 훅에서 자동으로 잔액을 로드하므로 별도 처리 불필요
+      // 카테고리 데이터 로드
+      const [majorCatsData] = await Promise.all([
+        getMajorCategories()
+      ]);
+      setMajorCategories(majorCatsData.categories);
+      
+      // useBalanceData 훅에서 자동으로 day를 로드하므로 별도 처리 불필요
       
       // 초기 장소 데이터 로드
       await loadPlaces();
@@ -222,13 +265,15 @@ export default function PlacesPage() {
       const params = {
         skip: (pagination.page - 1) * pagination.limit,
         limit: pagination.limit,
-        ...(filters.category !== 'all' && { category_id: parseInt(filters.category) }),
+        ...(filters.category !== 'all' && { major_category: filters.category }),
         ...(filters.search && { search: filters.search }),
         ...(filters.region !== 'all' && { region: filters.region }),
         ...(filters.sortBy && { sort_by: filters.sortBy }),
         ...(filters.minRating > 0 && { min_rating: filters.minRating }),
         ...(filters.hasParking && { has_parking: filters.hasParking }),
-        ...(filters.hasPhone && { has_phone: filters.hasPhone })
+        ...(filters.hasPhone && { has_phone: filters.hasPhone }),
+        ...(filters.middleCategory !== 'all' && { middle_category: filters.middleCategory }),
+        ...(filters.minorCategory !== 'all' && { minor_category: filters.minorCategory })
       };
 
       let data = await getPlaces(params);
@@ -306,9 +351,53 @@ export default function PlacesPage() {
     }
   };
 
-  const handleCategoryChange = (categoryId: string) => {
-    setFilters(prev => ({ ...prev, category: categoryId }));
+  const handleCategoryChange = async (categoryId: string) => {
+    setFilters(prev => ({ 
+      ...prev, 
+      category: categoryId,
+      middleCategory: 'all',  // 대분류 변경시 중/소분류 초기화
+      minorCategory: 'all'
+    }));
     setPagination(prev => ({ ...prev, page: 1 })); // 필터 변경시 1페이지로
+    
+    // 중분류 카테고리 로드
+    if (categoryId !== 'all') {
+      try {
+        const middleCatsData = await getMiddleCategories(categoryId);
+        setMiddleCategories(middleCatsData.categories);
+      } catch (error) {
+        console.error('중분류 로드 실패:', error);
+        setMiddleCategories([]);
+      }
+    } else {
+      setMiddleCategories([]);
+      setMinorCategories([]);
+    }
+  };
+
+  const handleMiddleCategoryChange = async (middleCategoryId: string) => {
+    setFilters(prev => ({ 
+      ...prev, 
+      middleCategory: middleCategoryId,
+      minorCategory: 'all'  // 중분류 변경시 소분류 초기화
+    }));
+    
+    // 소분류 카테고리 로드
+    if (middleCategoryId !== 'all') {
+      try {
+        const minorCatsData = await getMinorCategories(filters.category, middleCategoryId);
+        setMinorCategories(minorCatsData.categories);
+      } catch (error) {
+        console.error('소분류 로드 실패:', error);
+        setMinorCategories([]);
+      }
+    } else {
+      setMinorCategories([]);
+    }
+  };
+
+  const handleMinorCategoryChange = (minorCategoryId: string) => {
+    setFilters(prev => ({ ...prev, minorCategory: minorCategoryId }));
   };
 
   const handlePageChange = (newPage: number) => {
@@ -325,7 +414,6 @@ export default function PlacesPage() {
   const isFormValid = 
     aiSearchForm.description.length >= 20 && 
     aiSearchForm.description.length <= 200 &&
-    aiSearchForm.district !== '' &&
     balance && balance.total_balance >= 300;
 
   const getDescriptionStatus = () => {
@@ -348,7 +436,7 @@ export default function PlacesPage() {
         throw new Error('로그인이 필요합니다');
       }
 
-      // 1. 먼저 300원 결제 처리
+      // 1. 먼저 300 day 결제 처리
       const deductResult = await paymentsApi.deductBalance({
         amount: 300,
         service_type: 'ai_search',
@@ -365,12 +453,15 @@ export default function PlacesPage() {
       setAiSearchResults(result.places);
       setShowAiResults(true);
       
-      // localStorage에 AI 검색 상태 저장
-      localStorage.setItem('ai-search-results', JSON.stringify(result.places));
-      localStorage.setItem('show-ai-results', 'true');
-      localStorage.setItem('ai-search-form', JSON.stringify(aiSearchForm));
+      // 사용자별 localStorage에 AI 검색 상태 저장
+      if (currentUser) {
+        localStorage.setItem(getUserStorageKey('ai-search-results'), JSON.stringify(result.places));
+        localStorage.setItem(getUserStorageKey('show-ai-results'), 'true');
+        localStorage.setItem(getUserStorageKey('ai-search-form'), JSON.stringify(aiSearchForm));
+      }
       
-      // useBalanceData 훅이 자동으로 잔액을 새로고침하므로 별도 처리 불필요
+      // day 즉시 업데이트
+      await refreshBalance();
       
       // 성공 토스트
       toast.success(`AI 검색 완료! ${result.places.length}개 장소 발견 (${result.search_time.toFixed(1)}초)`);
@@ -385,7 +476,9 @@ export default function PlacesPage() {
   // 일반 검색 시 AI 결과 숨김
   const handleNormalSearch = () => {
     setShowAiResults(false);
-    localStorage.setItem('show-ai-results', 'false');
+    if (currentUser) {
+      localStorage.setItem(getUserStorageKey('show-ai-results'), 'false');
+    }
     handleSearchSubmit();
   };
 
@@ -412,11 +505,11 @@ export default function PlacesPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4">
+      <div className="min-h-screen bg-gray-50 p-4">
         <div className="container mx-auto max-w-7xl">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">인기 장소 둘러보기</h1>
-            <p className="text-gray-600">다른 사용자들이 추천하는 핫플을 확인해보세요 ✨</p>
+          <div className="mb-8 text-center">
+            <h1 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">인기 장소 둘러보기</h1>
+            <p className="text-lg text-text-secondary">다른 사용자들이 추천하는 핫플을 확인해보세요 ✨</p>
           </div>
           {renderSkeleton()}
         </div>
@@ -425,13 +518,13 @@ export default function PlacesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4">
+    <div className="min-h-screen bg-gray-50 p-4">
       <div className="container mx-auto max-w-7xl">
         {/* 헤더 */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">인기 장소 둘러보기</h1>
-          <p className="text-gray-600">
-            총 <span className="font-semibold text-blue-600">{places.length.toLocaleString()}</span>개의 장소가 찾아졌어요 ✨
+        <div className="mb-8 text-center">
+          <h1 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">인기 장소 둘러보기</h1>
+          <p className="text-lg text-text-secondary">
+            총 <span className="font-semibold text-primary-pink">{places.length.toLocaleString()}</span>개의 장소가 찾아졌어요 ✨
           </p>
         </div>
 
@@ -453,7 +546,7 @@ export default function PlacesPage() {
                       setShowSuggestions(true);
                     }
                   }}
-                  className="pl-10 pr-10 bg-white"
+                  className="pl-10 pr-10 bg-white rounded-xl border-gray-200 focus:border-primary-pink h-12"
                   autoComplete="off"
                 />
                 {isSearching && (
@@ -463,7 +556,7 @@ export default function PlacesPage() {
               
               {/* 자동완성 드롭다운 */}
               {showSuggestions && (
-                <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-80 overflow-y-auto mt-1">
+                <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-xl shadow-lg z-50 max-h-80 overflow-y-auto mt-2">
                   {isSearching ? (
                     <div className="p-4 text-center text-gray-500">
                       <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2" />
@@ -481,8 +574,8 @@ export default function PlacesPage() {
                           onMouseEnter={() => setSelectedSuggestionIndex(index)}
                         >
                           <div className="flex items-center space-x-3">
-                            <div className="w-8 h-8 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg flex items-center justify-center flex-shrink-0">
-                              <MapPin className="w-4 h-4 text-blue-600" />
+                            <div className="w-8 h-8 bg-gradient-to-br from-secondary-pink to-primary-pink rounded-lg flex items-center justify-center flex-shrink-0">
+                              <MapPin className="w-4 h-4 text-white" />
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="font-medium text-gray-900 truncate">{place.name}</div>
@@ -514,17 +607,47 @@ export default function PlacesPage() {
             </div>
             
             {/* 필터 섹션 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              {/* 카테고리 필터 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
+              {/* 대분류 필터 */}
               <select
                 value={filters.category}
                 onChange={(e) => handleCategoryChange(e.target.value)}
-                className="px-4 py-2 bg-white border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-pink focus:border-primary-pink"
               >
                 <option value="all">모든 카테고리</option>
-                {categories.map((category) => (
-                  <option key={category.category_id} value={category.category_id.toString()}>
-                    {category.name}
+                {majorCategories.map(category => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+
+              {/* 중분류 필터 */}
+              <select
+                value={filters.middleCategory}
+                onChange={(e) => handleMiddleCategoryChange(e.target.value)}
+                disabled={filters.category === 'all' || middleCategories.length === 0}
+                className="px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-pink focus:border-primary-pink disabled:bg-gray-100 disabled:text-gray-400"
+              >
+                <option value="all">모든 중분류</option>
+                {middleCategories.map(category => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+
+              {/* 소분류 필터 */}
+              <select
+                value={filters.minorCategory}
+                onChange={(e) => handleMinorCategoryChange(e.target.value)}
+                disabled={filters.middleCategory === 'all' || minorCategories.length === 0}
+                className="px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-pink focus:border-primary-pink disabled:bg-gray-100 disabled:text-gray-400"
+              >
+                <option value="all">모든 소분류</option>
+                {minorCategories.map(category => (
+                  <option key={category} value={category}>
+                    {category}
                   </option>
                 ))}
               </select>
@@ -533,7 +656,7 @@ export default function PlacesPage() {
               <select
                 value={filters.region}
                 onChange={(e) => setFilters(prev => ({ ...prev, region: e.target.value }))}
-                className="px-4 py-2 bg-white border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-pink focus:border-primary-pink"
               >
                 <option value="all">모든 지역</option>
                 {SEOUL_DISTRICTS.map((district) => (
@@ -547,7 +670,7 @@ export default function PlacesPage() {
               <select
                 value={filters.sortBy}
                 onChange={(e) => setFilters(prev => ({ ...prev, sortBy: e.target.value }))}
-                className="px-4 py-2 bg-white border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-pink focus:border-primary-pink"
               >
                 <option value="review_count_desc">후기 많은 순</option>
                 <option value="rating_desc">평점 높은 순</option>
@@ -559,7 +682,7 @@ export default function PlacesPage() {
               <select
                 value={filters.minRating}
                 onChange={(e) => setFilters(prev => ({ ...prev, minRating: parseFloat(e.target.value) }))}
-                className="px-4 py-2 bg-white border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-pink focus:border-primary-pink"
               >
                 <option value={0}>모든 평점</option>
                 <option value={3}>3점 이상</option>
@@ -569,21 +692,21 @@ export default function PlacesPage() {
 
               {/* 고급 필터 */}
               <div className="flex gap-2">
-                <label className="flex items-center space-x-2 bg-white px-3 py-2 rounded-md border border-gray-300 cursor-pointer hover:bg-gray-50 text-sm">
+                <label className="flex items-center space-x-2 bg-white px-4 py-3 rounded-xl border border-gray-200 cursor-pointer hover:bg-gray-50 text-sm">
                   <input
                     type="checkbox"
                     checked={filters.hasParking}
                     onChange={(e) => setFilters(prev => ({ ...prev, hasParking: e.target.checked }))}
-                    className="text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    className="text-primary-pink focus:ring-primary-pink border-gray-300 rounded"
                   />
                   <span>주차 가능</span>
                 </label>
-                <label className="flex items-center space-x-2 bg-white px-3 py-2 rounded-md border border-gray-300 cursor-pointer hover:bg-gray-50 text-sm">
+                <label className="flex items-center space-x-2 bg-white px-4 py-3 rounded-xl border border-gray-200 cursor-pointer hover:bg-gray-50 text-sm">
                   <input
                     type="checkbox"
                     checked={filters.hasPhone}
                     onChange={(e) => setFilters(prev => ({ ...prev, hasPhone: e.target.checked }))}
-                    className="text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    className="text-primary-pink focus:ring-primary-pink border-gray-300 rounded"
                   />
                   <span>전화번호</span>
                 </label>
@@ -591,14 +714,36 @@ export default function PlacesPage() {
             </div>
 
             {/* 적용된 필터 표시 */}
-            {(filters.category !== 'all' || filters.region !== 'all' || filters.search || filters.minRating > 0 || filters.hasParking || filters.hasPhone) && (
+            {(filters.category !== 'all' || filters.middleCategory !== 'all' || filters.minorCategory !== 'all' || filters.region !== 'all' || filters.search || filters.minRating > 0 || filters.hasParking || filters.hasPhone) && (
               <div className="flex flex-wrap gap-2 items-center">
                 <span className="text-sm text-gray-600 font-medium">적용된 필터:</span>
                 {filters.category !== 'all' && (
                   <Badge variant="secondary" className="flex items-center gap-1">
-                    {categories.find(c => c.category_id.toString() === filters.category)?.name}
+                    {filters.category}
                     <button
                       onClick={() => setFilters(prev => ({ ...prev, category: 'all' }))}
+                      className="ml-1 hover:text-red-600"
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                )}
+                {filters.middleCategory !== 'all' && (
+                  <Badge variant="secondary" className="flex items-center gap-1">
+                    중분류: {filters.middleCategory}
+                    <button
+                      onClick={() => setFilters(prev => ({ ...prev, middleCategory: 'all', minorCategory: 'all' }))}
+                      className="ml-1 hover:text-red-600"
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                )}
+                {filters.minorCategory !== 'all' && (
+                  <Badge variant="secondary" className="flex items-center gap-1">
+                    소분류: {filters.minorCategory}
+                    <button
+                      onClick={() => setFilters(prev => ({ ...prev, minorCategory: 'all' }))}
                       className="ml-1 hover:text-red-600"
                     >
                       ×
@@ -674,7 +819,9 @@ export default function PlacesPage() {
                       sortBy: 'review_count_desc',
                       minRating: 0,
                       hasParking: false,
-                      hasPhone: false
+                      hasPhone: false,
+                      middleCategory: 'all',
+                      minorCategory: 'all'
                     };
                     setFilters(resetFilters);
                     setSearchInput('');
@@ -693,122 +840,230 @@ export default function PlacesPage() {
         </div>
 
         {/* AI 검색 섹션 */}
-        <div className="mb-8 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 border border-blue-100">
-          <div className="mb-4">
-            <h2 className="text-xl font-bold text-gray-900 mb-2 flex items-center gap-2">
-              🤖 AI 스마트 검색
-              <span className="text-sm font-normal text-gray-600">- 자연어로 원하는 장소를 찾아보세요</span>
-            </h2>
-            <p className="text-sm text-gray-600">
-              예: "연인과 함께 가기 좋은 분위기 있는 데이트 카페", "인스타 감성의 브런치가 유명한 맛집"
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            {/* 설명 입력 필드 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                찾고 싶은 장소 설명 (20-200자)
-              </label>
-              <textarea
-                value={aiSearchForm.description}
-                onChange={(e) => setAiSearchForm(prev => ({ ...prev, description: e.target.value }))}
-                placeholder="예: 연인과 함께 가기 좋은 분위기 있는 데이트 카페, 인스타그램 감성의 브런치가 유명한 맛집"
-                className="w-full h-20 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                maxLength={200}
-              />
-              <div className="flex justify-between items-center mt-1">
-                <span className={`text-xs ${getDescriptionStatus().valid ? 'text-green-600' : 'text-red-600'}`}>
-                  {getDescriptionStatus().message}
-                </span>
-              </div>
-            </div>
-
-            {/* 구 선택 및 카테고리 선택 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">구 선택 (필수)</label>
-                <select
-                  value={aiSearchForm.district}
-                  onChange={(e) => setAiSearchForm(prev => ({ ...prev, district: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">구 선택</option>
-                  {SEOUL_DISTRICTS.map(district => (
-                    <option key={district} value={district}>{district}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">카테고리 (선택사항)</label>
-                <select
-                  value={aiSearchForm.category}
-                  onChange={(e) => setAiSearchForm(prev => ({ ...prev, category: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="전체">전체</option>
-                  {categories.map(category => (
-                    <option key={category.category_id} value={category.name}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* 검색 버튼 및 잔액 표시 */}
+        <div className="mb-8 bg-gradient-to-r from-secondary-pink/20 to-soft-purple/20 rounded-2xl border border-primary-pink/20 overflow-hidden">
+          {/* AI 검색 헤더 (항상 표시) */}
+          <div 
+            className="p-6 cursor-pointer hover:bg-white/50 transition-colors"
+            onClick={() => setIsAiSearchOpen(!isAiSearchOpen)}
+          >
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Button
-                  onClick={handleAiSearch}
-                  disabled={!isFormValid || isAiSearching}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 disabled:opacity-50"
-                >
-                  {isAiSearching ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      AI가 장소를 찾고 있습니다...
-                    </>
-                  ) : (
-                    <>
-                      🤖 AI 검색 (300원)
-                    </>
-                  )}
-                </Button>
-                
-                <div className="text-sm text-gray-600">
-                  잔액: <span className="font-semibold text-blue-600">
-                    {balance ? balance.total_balance.toLocaleString() : '0'}원
-                  </span>
-                </div>
+              <div>
+                <h2 className="text-xl font-bold text-text-primary mb-2 flex items-center gap-2">
+                  🤖 AI 스마트 검색
+                  <span className="text-sm font-normal text-text-secondary">- 자연어로 원하는 장소를 찾아보세요</span>
+                </h2>
+                <p className="text-sm text-text-secondary">
+                  예: "연인과 함께 가기 좋은 분위기 있는 데이트 카페", "인스타 감성의 브런치가 유명한 맛집"
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-primary-pink">
+                <span className="text-sm font-medium">
+                  {isAiSearchOpen ? '접기' : '펼치기'}
+                </span>
+                {isAiSearchOpen ? (
+                  <ChevronUp className="w-5 h-5" />
+                ) : (
+                  <ChevronDown className="w-5 h-5" />
+                )}
               </div>
             </div>
-
-            {/* 에러 메시지 */}
-            {aiSearchError && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-3">
-                <p className="text-red-700 text-sm">{aiSearchError}</p>
-              </div>
-            )}
           </div>
+
+          {/* AI 검색 폼 (토글 가능) */}
+          {isAiSearchOpen && (
+            <div className="px-6 pb-6 border-t border-primary-pink/20 bg-white/30">
+              <div className="space-y-4 mt-4">
+                {/* 설명 입력 필드 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    찾고 싶은 장소 설명 (20-200자)
+                  </label>
+                  <textarea
+                    value={aiSearchForm.description}
+                    onChange={(e) => setAiSearchForm(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="예: 연인과 함께 가기 좋은 분위기 있는 데이트 카페, 인스타그램 감성의 브런치가 유명한 맛집"
+                    className="w-full h-20 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-pink focus:border-primary-pink resize-none"
+                    maxLength={200}
+                  />
+                  <div className="flex justify-between items-center mt-1">
+                    <span className={`text-xs ${getDescriptionStatus().valid ? 'text-green-600' : 'text-red-600'}`}>
+                      {getDescriptionStatus().message}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 구 선택 및 카테고리 선택 */}
+                <div className="space-y-4">
+                  {/* 구 선택 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">구 선택 (선택사항)</label>
+                    <select
+                      value={aiSearchForm.district}
+                      onChange={(e) => setAiSearchForm(prev => ({ ...prev, district: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-pink focus:border-primary-pink"
+                    >
+                      <option value="전체">전체</option>
+                      {SEOUL_DISTRICTS.map(district => (
+                        <option key={district} value={district}>{district}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 카테고리 선택 (대중소) */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* 대분류 */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">대분류</label>
+                      <select
+                        value={aiSearchForm.major_category}
+                        onChange={async (e) => {
+                          const major = e.target.value;
+                          setAiSearchForm(prev => ({ 
+                            ...prev, 
+                            major_category: major,
+                            middle_category: '전체',
+                            minor_category: '전체'
+                          }));
+                          
+                          // 중분류 로드
+                          if (major !== '전체') {
+                            try {
+                              const middleCatsData = await getMiddleCategories(major);
+                              setMiddleCategories(middleCatsData.categories);
+                            } catch (error) {
+                              console.error('AI 검색 중분류 로드 실패:', error);
+                              setMiddleCategories([]);
+                            }
+                          } else {
+                            setMiddleCategories([]);
+                            setMinorCategories([]);
+                          }
+                        }}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-pink focus:border-primary-pink"
+                      >
+                        <option value="전체">전체</option>
+                        {majorCategories.map(category => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 중분류 */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">중분류</label>
+                      <select
+                        value={aiSearchForm.middle_category}
+                        onChange={async (e) => {
+                          const middle = e.target.value;
+                          setAiSearchForm(prev => ({ 
+                            ...prev, 
+                            middle_category: middle,
+                            minor_category: '전체'
+                          }));
+                          
+                          // 소분류 로드
+                          if (middle !== '전체') {
+                            try {
+                              const minorCatsData = await getMinorCategories(aiSearchForm.major_category, middle);
+                              setMinorCategories(minorCatsData.categories);
+                            } catch (error) {
+                              console.error('AI 검색 소분류 로드 실패:', error);
+                              setMinorCategories([]);
+                            }
+                          } else {
+                            setMinorCategories([]);
+                          }
+                        }}
+                        disabled={aiSearchForm.major_category === '전체' || middleCategories.length === 0}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-pink focus:border-primary-pink disabled:bg-gray-100 disabled:text-gray-400"
+                      >
+                        <option value="전체">전체</option>
+                        {middleCategories.map(category => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 소분류 */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">소분류</label>
+                      <select
+                        value={aiSearchForm.minor_category}
+                        onChange={(e) => setAiSearchForm(prev => ({ ...prev, minor_category: e.target.value }))}
+                        disabled={aiSearchForm.middle_category === '전체' || minorCategories.length === 0}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-pink focus:border-primary-pink disabled:bg-gray-100 disabled:text-gray-400"
+                      >
+                        <option value="전체">전체</option>
+                        {minorCategories.map(category => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 검색 버튼 및 day 표시 */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <Button
+                      onClick={handleAiSearch}
+                      disabled={!isFormValid || isAiSearching}
+                      className="bg-primary-pink hover:bg-primary-pink/90 text-white px-6 py-3 rounded-full disabled:opacity-50"
+                    >
+                      {isAiSearching ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          AI가 장소를 찾고 있습니다...
+                        </>
+                      ) : (
+                        <>
+                          🤖 AI 검색 (300 day)
+                        </>
+                      )}
+                    </Button>
+                    
+                    <div className="text-sm text-text-secondary">
+                      day: <span className="font-semibold text-primary-pink">
+                        {balance ? balance.total_balance.toLocaleString() : '0'}원
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 에러 메시지 */}
+                {aiSearchError && (
+                  <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                    <p className="text-red-700 text-sm">{aiSearchError}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 검색 결과 타입 표시 */}
         {showAiResults && (
           <div className="mb-4 flex items-center gap-2">
-            <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+            <Badge variant="secondary" className="bg-secondary-pink text-primary-pink">
               🤖 AI 검색 결과
             </Badge>
-            <span className="text-sm text-gray-600">{searchResultTitle}</span>
+            <span className="text-sm text-text-secondary">{searchResultTitle}</span>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => {
                 setShowAiResults(false);
-                localStorage.setItem('show-ai-results', 'false');
+                if (currentUser) {
+                  localStorage.setItem(getUserStorageKey('show-ai-results'), 'false');
+                }
               }}
-              className="text-gray-500 hover:text-gray-700"
+              className="text-text-secondary hover:text-text-primary rounded-full"
             >
               일반 검색으로 돌아가기
             </Button>
@@ -823,7 +1078,7 @@ export default function PlacesPage() {
             <p className="text-gray-500 mb-6">다른 검색어를 사용하거나 필터를 변경해보세요</p>
             <Button 
               onClick={() => {
-                const resetFilters = { category: 'all', region: 'all', search: '', sortBy: 'review_count_desc', minRating: 0, hasParking: false, hasPhone: false };
+                const resetFilters = { category: 'all', region: 'all', search: '', sortBy: 'review_count_desc', minRating: 0, hasParking: false, hasPhone: false, middleCategory: 'all', minorCategory: 'all' };
                 setFilters(resetFilters);
                 setSearchInput('');
                 // localStorage에서도 제거
@@ -842,15 +1097,15 @@ export default function PlacesPage() {
               {displayPlaces.map((place) => (
                 <Card 
                   key={place.place_id} 
-                  className="bg-white shadow-sm hover:shadow-lg transition-all duration-300 cursor-pointer border-0 overflow-hidden group"
+                  className="bg-white border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer rounded-2xl overflow-hidden group"
                   onClick={() => handlePlaceClick(place.place_id)}
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between mb-2">
-                      <CardTitle className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1">
+                      <CardTitle className="text-lg font-semibold text-text-primary group-hover:text-primary-pink transition-colors line-clamp-1">
                         {place.name}
                       </CardTitle>
-                      <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-500 group-hover:translate-x-1 transition-all flex-shrink-0 ml-2" />
+                      <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-primary-pink group-hover:translate-x-1 transition-all flex-shrink-0 ml-2" />
                     </div>
                     
                     {place.category_name && (
@@ -898,7 +1153,7 @@ export default function PlacesPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 p-2"
+                        className="text-primary-pink hover:text-primary-pink/80 hover:bg-secondary-pink p-2 rounded-full"
                         onClick={(e) => {
                           e.stopPropagation();
                           handlePlaceClick(place.place_id);
@@ -919,6 +1174,7 @@ export default function PlacesPage() {
                   variant="outline"
                   onClick={() => handlePageChange(pagination.page - 1)}
                   disabled={pagination.page === 1}
+                  className="rounded-full border-gray-200 hover:border-primary-pink hover:bg-secondary-pink"
                 >
                   이전
                 </Button>
@@ -942,7 +1198,11 @@ export default function PlacesPage() {
                       key={pageNum}
                       variant={pagination.page === pageNum ? "default" : "outline"}
                       onClick={() => handlePageChange(pageNum)}
-                      className="w-10 h-10"
+                      className={`w-10 h-10 rounded-full ${
+                        pagination.page === pageNum 
+                          ? "bg-primary-pink hover:bg-primary-pink/90 text-white" 
+                          : "border-gray-200 hover:border-primary-pink hover:bg-secondary-pink"
+                      }`}
                     >
                       {pageNum}
                     </Button>
@@ -953,6 +1213,7 @@ export default function PlacesPage() {
                   variant="outline"
                   onClick={() => handlePageChange(pagination.page + 1)}
                   disabled={pagination.page >= Math.ceil(totalCount / pagination.limit)}
+                  className="rounded-full border-gray-200 hover:border-primary-pink hover:bg-secondary-pink"
                 >
                   다음
                 </Button>

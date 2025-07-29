@@ -172,7 +172,7 @@ export default function RefundPage() {
     if (parseInt(refundAmount) < 1000) {
       toast({
         title: "금액 오류",
-        description: "최소 환불 금액은 1,000원입니다.",
+        description: "최소 환불 금액은 1,000 day입니다.",
         variant: "destructive",
       });
       return;
@@ -181,7 +181,7 @@ export default function RefundPage() {
     if (parseInt(refundAmount) > maxRefundableAmount) {
       toast({
         title: "금액 오류",
-        description: `환불 가능 금액(${maxRefundableAmount.toLocaleString()}원)을 초과할 수 없습니다.`,
+        description: `환불 가능 금액(${maxRefundableAmount.toLocaleString()} day)을 초과할 수 없습니다.`,
         variant: "destructive",
       });
       return;
@@ -311,7 +311,7 @@ export default function RefundPage() {
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">환불 관리</h1>
-          <p className="text-gray-600">크레딧 환불 신청 및 내역을 관리하세요</p>
+          <p className="text-gray-600">day 환불 신청 및 내역을 관리하세요</p>
         </div>
 
         {/* 탭 UI */}
@@ -355,7 +355,7 @@ export default function RefundPage() {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="font-medium">
-                              {history.amount?.toLocaleString() || '0'}원 충전
+                              {history.amount?.toLocaleString() || '0'} day 충전
                             </p>
                             <p className="text-sm text-gray-600">
                               {new Date(history.created_at).toLocaleDateString('ko-KR')}
@@ -366,10 +366,10 @@ export default function RefundPage() {
                           </div>
                           <div className="text-right">
                             <Badge variant="outline">
-                              환불됨: {history.refunded_amount?.toLocaleString() || '0'}원
+                              환불됨: {history.refunded_amount?.toLocaleString() || '0'} day
                             </Badge>
                             <p className="text-sm text-green-600 mt-1">
-                              환불가능: {((history.amount || 0) - (history.refunded_amount || 0)).toLocaleString()}원
+                              환불가능: {((history.amount || 0) - (history.refunded_amount || 0)).toLocaleString()} day
                             </p>
                           </div>
                         </div>
@@ -411,7 +411,7 @@ export default function RefundPage() {
                       />
                     </div>
                     <p className="text-xs text-gray-500">
-                      최소 환불 금액: 1,000원 / 최대 환불 가능 금액: {maxRefundableAmount.toLocaleString()}원
+                      최소 환불 금액: 1,000 day / 최대 환불 가능 금액: {maxRefundableAmount.toLocaleString()} day
                     </p>
                   </div>
 
@@ -555,7 +555,7 @@ export default function RefundPage() {
                             <div className="flex items-center gap-2 mb-1">
                               {getStatusIcon(refund.status)}
                               <span className="font-medium">
-                                {refund.refund_amount.toLocaleString()}원 환불
+                                {refund.refund_amount.toLocaleString()} day 환불
                               </span>
                               {getStatusBadge(refund.status)}
                             </div>

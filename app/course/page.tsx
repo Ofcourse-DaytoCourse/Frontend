@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Send, MapPin, MessageCircle, Save, Clock, Bot, User, Sparkles, List, UserCheck, Wallet, Heart, Star, ArrowRight, Gift, X, Navigation } from "lucide-react";
+import { Send, MapPin, MessageCircle, Save, Clock, Bot, User, Sparkles, List, UserCheck, Wallet, Heart, Star, ArrowRight, Gift, X, Navigation, ArrowLeft, Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Progress } from "@/components/ui/progress";
+import { Slider } from "@/components/ui/slider";
 import { TokenStorage } from "@/lib/storage";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
@@ -48,9 +51,9 @@ interface AdditionalInfo {
 }
 
 // --- 상수 정의 ---
-const RELATIONSHIP_STAGES = ["연인", "썸", "소개팅"];
-const ATMOSPHERES = ["로맨틱", "트렌디", "조용한", "활기찬", "고급스러운", "감성적", "편안한"];
-const BUDGETS = ["3만원", "5만원", "10만원", "15만원", "20만원 이상"];
+const RELATIONSHIP_STAGES = ["연애 초기", "연인", "썸", "소개팅"];
+const ATMOSPHERES = ["로맨틱", "트렌디", "조용한", "활기찬", "고급스러운", "감성적", "편안한", "힐링"];
+const BUDGETS = ["3만원", "5만원", "7만원", "10만원", "15만원", "20만원 이상"];
 const TIME_SLOTS = ["오전", "오후", "저녁", "밤"];
 const MBTI_TYPES = [
   'INTJ', 'INTP', 'ENTJ', 'ENTP',
@@ -59,12 +62,31 @@ const MBTI_TYPES = [
   'ISTP', 'ISFP', 'ESTP', 'ESFP'
 ];
 
+// StepCard 컴포넌트 추가
+const StepCard = ({
+  children,
+  onClick,
+  isSelected,
+}: { children: React.ReactNode; onClick: () => void; isSelected: boolean }) => (
+  <Card
+    onClick={onClick}
+    className={cn(
+      "text-center p-6 cursor-pointer transition-all border-2 rounded-2xl hover:shadow-lg",
+      isSelected
+        ? "border-primary-pink shadow-lg bg-secondary-pink"
+        : "border-brand-border hover:border-primary-pink hover:shadow-md bg-white",
+    )}
+  >
+    {children}
+  </Card>
+);
+
 export default function CoursePage() {
   const { user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  // 잔액 정보 훅 
+  // day 정보 훅 
   const { balance, isLoading: balanceLoading, refreshBalance } = useBalanceData(false, 0);
   
   // --- 상태 관리 ---
@@ -81,6 +103,14 @@ export default function CoursePage() {
   const [showCourseModal, setShowCourseModal] = useState(false);
   const [editableTitle, setEditableTitle] = useState("");
   const [editableDescription, setEditableDescription] = useState("");
+  const [showChatHistory, setShowChatHistory] = useState(false);
+  const [chatSessions, setChatSessions] = useState<any[]>([]);
+  const [chatInputDisabled, setChatInputDisabled] = useState(false);
+  
+  // 오류 상태 관리
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [retryRecommendation, setRetryRecommendation] = useState<boolean>(false);
+  const [errorType, setErrorType] = useState<'sendMessage' | 'recommendation' | null>(null);
   
   const [isCollectingInfo, setIsCollectingInfo] = useState(false);
   const [missingFields, setMissingFields] = useState<string[]>([]);
@@ -95,14 +125,41 @@ export default function CoursePage() {
     time_slot: "",
   });
 
+  // 단계별 진행을 위한 state
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [showAIChat, setShowAIChat] = useState(false);
+
+  // 단계 정의
+  const steps = useMemo(() => {
+    const dynamicSteps = [];
+    if (!fullUserProfile?.profile_detail?.age_range) dynamicSteps.push("age");
+    if (!fullUserProfile?.profile_detail?.gender) dynamicSteps.push("gender");
+    if (!fullUserProfile?.profile_detail?.mbti) dynamicSteps.push("mbti");
+    return [...dynamicSteps, "relationship_stage", "atmosphere", "budget", "time_slot", "chat"];
+  }, [fullUserProfile]);
+
+  const isLastStep = currentStepIndex === steps.length - 2;
+  const isChatStep = steps[currentStepIndex] === "chat";
+  const progress = isChatStep ? 100 : (currentStepIndex / (steps.length - 1)) * 100;
+
+  const stepTitles: { [key: string]: string } = {
+    age: "나이를 알려주세요",
+    gender: "성별을 선택해주세요",
+    mbti: "MBTI를 선택해주세요",
+    relationship_stage: "두 분은 어떤 사이신가요?",
+    atmosphere: "원하는 데이트 분위기는?",
+    budget: "예산은 어느 정도로 생각하세요?",
+    time_slot: "언제 데이트 하실 예정인가요?",
+  };
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 잔액 포맷팅 함수
+  // day 포맷팅 함수
   const formatCurrency = (amount: number) => {
     if (amount === undefined || amount === null) {
-      return "0원";
+      return "0 day";
     }
-    return amount.toLocaleString() + "원";
+    return amount.toLocaleString() + " day";
   };
 
   // --- useEffect 훅 ---
@@ -124,6 +181,18 @@ export default function CoursePage() {
     }
   }, [user, router, searchParams]);
 
+  // 사이드바에서 채팅 기록 토글 이벤트 수신
+  useEffect(() => {
+    const handleToggleChatHistory = () => {
+      setShowChatHistory(prev => !prev);
+    };
+
+    window.addEventListener('toggleChatHistory', handleToggleChatHistory);
+    return () => {
+      window.removeEventListener('toggleChatHistory', handleToggleChatHistory);
+    };
+  }, []);
+
   // --- 데이터 로딩 및 초기화 함수 ---
   const prepareNewSessionForm = (profile: any) => {
     const missing: string[] = [];
@@ -144,6 +213,8 @@ export default function CoursePage() {
       time_slot: "",
     });
 
+    setCurrentStepIndex(0);
+    setShowAIChat(false);
     setIsCollectingInfo(true);
   };
 
@@ -174,14 +245,187 @@ export default function CoursePage() {
       if (response.ok) {
         const data = await response.json();
         setSessions(data.sessions || []);
+        // 채팅 기록용으로도 저장
+        setChatSessions(data.sessions || []);
       }
     } catch (error) {
       console.error('세션 목록 조회 실패:', error);
     }
   };
 
+  const deleteSession = async (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // 클릭 이벤트 버블링 방지
+    
+    if (!confirm('채팅 기록을 삭제하시겠습니까?')) return;
+    
+    try {
+      const token = TokenStorage.get();
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/chat/sessions/${sessionId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (!response.ok) throw new Error('세션 삭제 실패');
+      
+      // 현재 세션이 삭제된 세션이면 초기화
+      if (currentSessionId === sessionId) {
+        setCurrentSessionId("");
+        setMessages([]);
+        setShowAIChat(false);
+        setIsCollectingInfo(true);
+        setCurrentStepIndex(0);
+      }
+      
+      // 세션 목록 새로고침
+      loadUserSessions();
+      
+    } catch (error) {
+      console.error('세션 삭제 실패:', error);
+      alert('채팅 기록 삭제에 실패했습니다.');
+    }
+  };
+
+  const loadSessionMessages = async (sessionId: string) => {
+    console.log('[DEBUG] loadSessionMessages 시작:', sessionId);
+    try {
+      const token = TokenStorage.get();
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/chat/sessions/${sessionId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (!response.ok) throw new Error('세션 로딩 실패');
+      
+      const data = await response.json();
+      console.log('[DEBUG] 세션 데이터 로드 성공:', data);
+      if (data.success) {
+        setMessages(data.messages || []);
+        setCurrentSessionId(sessionId);
+        setShowChatHistory(false);
+        setQuickReplies([]);
+        
+        // 채팅 단계로 전환
+        setIsCollectingInfo(false);
+        setShowAIChat(true);
+        setCurrentStepIndex(steps.length - 1); // 채팅 단계로 이동
+        
+        // 세션 상태 분석 결과 처리
+        const sessionAnalysis = data.session_analysis;
+        console.log('[DEBUG] sessionAnalysis:', sessionAnalysis);
+        if (sessionAnalysis) {
+          if (sessionAnalysis.is_completed) {
+            // 완료된 세션: 채팅창 비활성화
+            setChatInputDisabled(true);
+            setCanRecommend(false);
+            setErrorMessage(null);
+            setErrorType(null);
+            console.log('✅ 완료된 세션 - 채팅 비활성화');
+          } else if (sessionAnalysis.status === 'error') {
+            // 오류 세션: 재시도 가능
+            setChatInputDisabled(false);
+            setCanRecommend(false);
+            setErrorMessage(sessionAnalysis.error_info?.error_message || '알 수 없는 오류가 발생했습니다.');
+            setErrorType('sendMessage'); // 기본적으로 sendMessage 오류로 처리
+            console.log('⚠️ 오류 세션 - 재시도 가능');
+          } else {
+            // 진행 중 세션: 마지막 메시지 체크 후 채팅창 상태 결정
+            setCanRecommend(true);
+            setErrorMessage(null);
+            setErrorType(null);
+            
+            // 마지막 메시지가 버튼/선택지인지 체크
+            const lastMessage = data.messages[data.messages.length - 1];
+            if (lastMessage && lastMessage.message_type === 'ASSISTANT') {
+              const messageContent = lastMessage.message_content;
+              
+              console.log('[DEBUG] 마지막 메시지 타입:', typeof messageContent);
+              console.log('[DEBUG] 마지막 메시지 내용:', messageContent);
+              if (typeof messageContent === 'object') {
+                console.log('[DEBUG] message_type:', messageContent?.message_type);
+              }
+              
+              // 버튼/선택지 메시지인 경우
+              if (typeof messageContent === 'object' && (
+                  messageContent?.message_type === 'buttons' || 
+                  messageContent?.message_type === 'category_checkbox'
+              )) {
+                setChatInputDisabled(true);
+                console.log('🔴 버튼/선택지 메시지 감지 - 채팅창 비활성화');
+                
+                // 이어서 하기: 사용자 메시지만 추출해서 AI 서버에 재전송
+                const userMessages = data.messages.filter(m => m.message_type === 'USER');
+                if (userMessages.length > 0) {
+                  const lastUserMessage = userMessages[userMessages.length - 1];
+                  console.log('🔄 이어서 하기: 마지막 사용자 메시지 재전송');
+                  await sendMessage(lastUserMessage.message_content);
+                }
+              } else if (typeof messageContent === 'string' && (
+                  messageContent.includes("데이트 시간은 얼마나") || 
+                  messageContent.includes("몷 개의 장소를 방문하고")
+              )) {
+                // 특정 텍스트 패턴도 채팅창 비활성화
+                setChatInputDisabled(true);
+                console.log('🔴 특정 패턴 메시지 감지 - 채팅창 비활성화');
+              } else {
+                // 일반 메시지는 채팅창 활성화
+                setChatInputDisabled(false);
+                console.log('🟢 일반 메시지 - 채팅창 활성화');
+              }
+            }
+          }
+        } else {
+          // sessionAnalysis가 없으면 직접 메시지 분석
+          console.log('[DEBUG] sessionAnalysis가 없음 - 직접 메시지 분석');
+          const lastMessage = data.messages[data.messages.length - 1];
+          
+          if (lastMessage?.course_data) {
+            // 코스 데이터가 있으면 완료
+            setChatInputDisabled(true);
+            setCanRecommend(false);
+            console.log('✅ 코스 데이터 감지 - 완료 상태');
+          } else if (lastMessage && lastMessage.message_type === 'ASSISTANT') {
+            const messageContent = lastMessage.message_content;
+            
+            console.log('[DEBUG] 마지막 메시지 타입:', typeof messageContent);
+            console.log('[DEBUG] 마지막 메시지 내용:', messageContent);
+            if (typeof messageContent === 'object') {
+              console.log('[DEBUG] message_type:', messageContent?.message_type);
+            }
+            
+            // 버튼/선택지 메시지인 경우
+            if (typeof messageContent === 'object' && (
+                messageContent?.message_type === 'buttons' || 
+                messageContent?.message_type === 'category_checkbox'
+            )) {
+              setChatInputDisabled(true);
+              setCanRecommend(false);
+              console.log('🔴 버튼/선택지 메시지 감지 - 채팅창 비활성화');
+              
+              // 이어서 하기: 사용자 메시지만 추출해서 AI 서버에 재전송
+              const userMessages = data.messages.filter(m => m.message_type === 'USER');
+              if (userMessages.length > 0) {
+                const lastUserMessage = userMessages[userMessages.length - 1];
+                console.log('🔄 이어서 하기: 마지막 사용자 메시지 재전송');
+                await sendMessage(lastUserMessage.message_content);
+              }
+            } else {
+              // 일반 메시지
+              setChatInputDisabled(false);
+              setCanRecommend(true);
+              console.log('🟢 일반 메시지 - 채팅창 활성화');
+            }
+          } else {
+            setChatInputDisabled(false);
+            setCanRecommend(true);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('세션 로딩 실패:', error);
+    }
+  };
+
   // --- 핵심 로직: 채팅 및 추천 ---
-  // 잔액 차감 및 AI 추천 요청 
+  // day 차감 및 AI 추천 요청 
   const handleFullSubmit = async () => {
     if (!user) return;
     setIsLoading(true);
@@ -192,8 +436,8 @@ export default function CoursePage() {
     try {
       const token = TokenStorage.get();
       
-      // 1단계: 1000원 차감 시도
-      console.log("💰 [PAYMENT] AI 추천 서비스 1000원 차감 시도");
+      // 1단계: 1000 day 차감 시도
+      console.log("💰 [PAYMENT] AI 추천 서비스 1000 day 차감 시도");
       const deductResult = await paymentsApi.deductBalance({
         amount: 1000,
         service_type: 'course_generation',
@@ -202,12 +446,12 @@ export default function CoursePage() {
       }, token);
 
       if (!deductResult.success) {
-        throw new Error(deductResult.message || '잔액이 부족합니다');
+        throw new Error(deductResult.message || 'day가 부족합니다');
       }
 
-      console.log("✅ [PAYMENT] 1000원 차감 성공, 남은 잔액:", deductResult.remaining_balance);
+      console.log("✅ [PAYMENT] 1000 day 차감 성공, 남은 day:", deductResult.remaining_balance);
       
-      // 잔액 정보 실시간 업데이트
+      // day 정보 실시간 업데이트
       await refreshBalance();
 
       // 2단계: AI 세션 생성
@@ -248,6 +492,8 @@ export default function CoursePage() {
         setMessages(initialMessages);
         setQuickReplies(data.response.quick_replies || []);
         setIsCollectingInfo(false);
+        setShowAIChat(true);
+        setCurrentStepIndex(steps.length - 1); // 채팅 단계로 이동
         await loadUserSessions();
       } else {
         console.error("❌ [ERROR] 세션 생성 실패:", data.message);
@@ -256,12 +502,12 @@ export default function CoursePage() {
     } catch (error: any) {
       console.error('AI 추천 요청 실패:', error);
       
-      // 잔액 부족 에러 처리
-      if (error.message?.includes('잔액') || error.message?.includes('부족')) {
+      // day 부족 에러 처리
+      if (error.message?.includes('day') || error.message?.includes('부족')) {
         const insufficientBalanceMessage: ChatMessage = {
           message_id: Date.now(),
           message_type: "ASSISTANT",
-          message_content: `💳 잔액이 부족합니다!\n\nAI 데이트 코스 추천 서비스 이용을 위해서는 1,000원이 필요합니다.\n현재 잔액: ${balance ? formatCurrency(balance.total_balance) : '0원'}\n\n먼저 크레딧을 충전해주세요! 💰`,
+          message_content: `💳 day가 부족합니다!\n\nAI 데이트 코스 추천 서비스 이용을 위해서는 1,000 day가 필요합니다.\n현재 day: ${balance ? formatCurrency(balance.total_balance) : '0 day'}\n\n먼저 day를 충전해주세요! 💰`,
           sent_at: new Date().toISOString()
         };
         setMessages([insufficientBalanceMessage]);
@@ -296,18 +542,49 @@ export default function CoursePage() {
       if (!response.ok) throw new Error('메시지 전송에 실패했습니다.');
 
       const data = await response.json();
+      console.log('[DEBUG] Response data:', data);
       if (data.success) {
-        const aiMessage: ChatMessage = { message_id: Date.now() + 1, message_type: "ASSISTANT", message_content: data.response.message, sent_at: new Date().toISOString() };
+        const aiMessage: ChatMessage = { 
+          message_id: Date.now() + 1, 
+          message_type: "ASSISTANT", 
+          message_content: data.response.message, 
+          sent_at: new Date().toISOString(),
+          course_data: data.response.course_data
+        };
+        console.log('[DEBUG] Created aiMessage:', aiMessage);
         setMessages(prev => [...prev, aiMessage]);
         setQuickReplies(data.response.quick_replies || []);
         if (typeof data.response.message === 'string' && data.response.message.includes("추천을 시작하시려면")) setCanRecommend(true);
+        
+        // 채팅 입력창 비활성화 조건 체크
+        const messageContent = data.response.message;
+        if (typeof messageContent === 'string') {
+          // 데이트 시간 질문 또는 장소 개수 질문일 때 입력창 비활성화
+          if (messageContent.includes("데이트 시간은 얼마나") || 
+              messageContent.includes("몇 개의 장소를 방문하고")) {
+            setChatInputDisabled(true);
+          }
+        }
+        
+        // 카테고리 체크박스나 버튼 메시지일 때도 입력창 비활성화
+        if (typeof messageContent === 'object' && (
+            messageContent?.message_type === 'buttons' || 
+            messageContent?.message_type === 'category_checkbox'
+        )) {
+          setChatInputDisabled(true);
+        }
+        
+        // 코스 데이터가 있으면 (최종 추천 완료) 입력창 완전 비활성화
+        if (data.response.course_data) {
+          setChatInputDisabled(true);
+        }
       } else {
         throw new Error(data.message || '메시지 전송 실패');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('메시지 전송 실패:', error);
-      const errorMessage: ChatMessage = { message_id: Date.now() + 2, message_type: "ASSISTANT", message_content: "죄송합니다. 메시지 전송 중 오류가 발생했습니다.", sent_at: new Date().toISOString() };
-      setMessages(prev => [...prev, errorMessage]);
+      setErrorMessage(error.message || '메시지 전송 중 오류가 발생했습니다.');
+      setErrorType('sendMessage');
     } finally {
       setIsLoading(false);
     }
@@ -334,13 +611,21 @@ export default function CoursePage() {
         setMessages(prev => [...prev, recommendationMessage]);
         setCanRecommend(false);
         setQuickReplies([]);
+        
+        // 최종 코스 추천 완료 시 채팅 입력창 비활성화
+        if (data.course_data) {
+          setChatInputDisabled(true);
+        }
+        
         await loadUserSessions();
       } else {
         throw new Error(data.message || '코스 추천 실패');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('코스 추천 실패:', error);
-      alert('코스 추천에 실패했습니다. 다시 시도해주세요.');
+      setErrorMessage(error.message || '코스 추천에 실패했습니다. 다시 시도해주세요.');
+      setErrorType('recommendation');
+      setRetryRecommendation(true);
     } finally {
       setIsLoading(false);
     }
@@ -352,6 +637,43 @@ export default function CoursePage() {
       ...prev, 
       [field]: field === 'age' ? parseInt(value) || 0 : value 
     }));
+  };
+
+  // 단계별 진행 함수들
+  const handleNext = () => {
+    if (isLastStep) {
+      // 마지막 단계에서는 AI 추천 요청
+      handleFullSubmit();
+    } else {
+      setCurrentStepIndex(prev => Math.min(prev + 1, steps.length - 1));
+    }
+  };
+
+  const handleBack = () => {
+    setCurrentStepIndex(prev => Math.max(prev - 1, 0));
+  };
+
+  // 현재 단계의 값이 입력되었는지 확인
+  const isCurrentStepValid = () => {
+    const currentStepId = steps[currentStepIndex];
+    switch (currentStepId) {
+      case "age":
+        return additionalInfo.age > 0;
+      case "gender":
+        return !!additionalInfo.gender;
+      case "mbti":
+        return !!additionalInfo.mbti;
+      case "relationship_stage":
+        return !!additionalInfo.relationship_stage;
+      case "atmosphere":
+        return !!additionalInfo.atmosphere;
+      case "budget":
+        return !!additionalInfo.budget;
+      case "time_slot":
+        return !!additionalInfo.time_slot;
+      default:
+        return true;
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -372,6 +694,9 @@ export default function CoursePage() {
       setIsCollectingInfo(true);
       return;
     }
+    
+    // 버튼 클릭 시 입력창 활성화 (다음 단계로 넘어가면서)
+    setChatInputDisabled(false);
     setInput(reply);
   };
 
@@ -484,7 +809,7 @@ export default function CoursePage() {
       const { convertCoordinatesToAddress } = await import('@/lib/kakao');
       const token = TokenStorage.get();
       
-      const sunnyWeatherCourses = courseData.course?.results?.sunny_weather || [];
+      const sunnyWeatherCourses = courseData.results?.sunny_weather || [];
       const firstCourse = sunnyWeatherCourses[0];
       
       if (!firstCourse) {
@@ -548,631 +873,235 @@ export default function CoursePage() {
     return <div className="min-h-screen bg-gray-50 pt-16 flex items-center justify-center"><Card><CardContent className="p-6 text-center text-gray-500">로그인이 필요합니다.</CardContent></Card></div>;
   }
 
-  const renderAdditionalInfoForm = () => (
-    <div className="max-w-4xl mx-auto">
-      <Card className="mb-6 bg-white/80 backdrop-blur-lg rounded-2xl md:rounded-3xl border-0 shadow-2xl">
-        <div className="h-2 md:h-3 bg-gradient-to-r from-rose-400 via-pink-500 to-purple-500 rounded-t-2xl md:rounded-t-3xl"></div>
-        <CardHeader className="pb-6 pt-8 text-center">
-          <div className="flex items-center justify-center space-x-3 mb-4">
-            <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-rose-400 to-pink-500 rounded-2xl flex items-center justify-center shadow-xl">
-              <Heart className="w-6 h-6 md:w-8 md:h-8 text-white" />
-            </div>
-            <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-purple-400 to-pink-500 rounded-2xl flex items-center justify-center shadow-xl">
-              <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-white" />
-            </div>
-          </div>
-          <CardTitle className="text-2xl md:text-3xl font-black bg-gradient-to-r from-rose-600 to-pink-600 bg-clip-text text-transparent mb-4">
-            새로운 데이트 코스 추천받기
-          </CardTitle>
-          <p className="text-gray-600 text-base md:text-lg">
-            AI가 두 분만을 위한 완벽한 데이트 코스를 추천해드릴게요! 💕
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-8">
-          <div className="space-y-6 md:space-y-8">
-            {missingFields.includes('age') && (
-              <div className="space-y-3">
-                <Label className="text-base md:text-lg font-semibold text-gray-700 flex items-center gap-2">
-                  <Star className="w-4 h-4 text-yellow-400" />
-                  나이
-                </Label>
-                <Select onValueChange={(value) => handleAdditionalInfoChange('age', value)} value={String(additionalInfo.age)}>
-                  <SelectTrigger className="rounded-xl border-pink-200 focus:border-pink-400 py-3">
-                    <SelectValue placeholder="나이를 선택해주세요" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    {Array.from({ length: 63 }, (_, i) => i + 18).map(age => (
-                      <SelectItem key={age} value={String(age)}>{age}세</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {missingFields.includes('gender') && (
-              <div className="space-y-3">
-                <Label className="text-base md:text-lg font-semibold text-gray-700 flex items-center gap-2">
-                  <Star className="w-4 h-4 text-yellow-400" />
-                  성별
-                </Label>
-                <RadioGroup
-                  value={additionalInfo.gender}
-                  onValueChange={(value) => handleAdditionalInfoChange('gender', value)}
-                  className="flex gap-4 md:gap-6"
-                >
-                  <div className="flex items-center space-x-3 bg-gradient-to-r from-blue-50 to-cyan-50 px-4 py-3 rounded-xl border border-blue-200">
-                    <RadioGroupItem value="male" id="male" className="border-blue-400" />
-                    <Label htmlFor="male" className="font-medium">남성</Label>
-                  </div>
-                  <div className="flex items-center space-x-3 bg-gradient-to-r from-pink-50 to-rose-50 px-4 py-3 rounded-xl border border-pink-200">
-                    <RadioGroupItem value="female" id="female" className="border-pink-400" />
-                    <Label htmlFor="female" className="font-medium">여성</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-            )}
-            {missingFields.includes('mbti') && (
-              <div className="space-y-3">
-                <Label className="text-base md:text-lg font-semibold text-gray-700 flex items-center gap-2">
-                  <Star className="w-4 h-4 text-yellow-400" />
-                  MBTI
-                </Label>
-                <Select onValueChange={(value) => handleAdditionalInfoChange('mbti', value)} value={additionalInfo.mbti}>
-                  <SelectTrigger className="rounded-xl border-pink-200 focus:border-pink-400 py-3">
-                    <SelectValue placeholder="MBTI를 선택해주세요" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MBTI_TYPES.map(type => (
-                      <SelectItem key={type} value={type}>{type}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <div className="space-y-4">
-              <Label className="text-lg md:text-xl font-bold text-gray-800 flex items-center gap-2">
-                <Heart className="w-5 h-5 text-rose-500" />
-                1. 누구와 함께하는 데이트인가요?
-              </Label>
-              <div className="flex flex-wrap gap-3">
-                {RELATIONSHIP_STAGES.map(stage => (
-                  <Button 
-                    key={stage} 
-                    variant={additionalInfo.relationship_stage === stage ? "default" : "outline"} 
-                    onClick={() => handleAdditionalInfoChange('relationship_stage', stage)}
-                    className={`rounded-full px-6 py-3 transition-all duration-300 ${
-                      additionalInfo.relationship_stage === stage 
-                        ? "bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white shadow-lg" 
-                        : "border-pink-200 text-gray-700 hover:bg-pink-50 hover:border-pink-300"
-                    }`}
-                  >
-                    {stage}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-4">
-              <Label className="text-lg md:text-xl font-bold text-gray-800 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-purple-500" />
-                2. 원하는 분위기는 무엇인가요?
-              </Label>
-              <div className="flex flex-wrap gap-3">
-                {ATMOSPHERES.map(item => (
-                  <Button 
-                    key={item} 
-                    variant={additionalInfo.atmosphere === item ? "default" : "outline"} 
-                    onClick={() => handleAdditionalInfoChange('atmosphere', item)}
-                    className={`rounded-full px-6 py-3 transition-all duration-300 ${
-                      additionalInfo.atmosphere === item 
-                        ? "bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg" 
-                        : "border-purple-200 text-gray-700 hover:bg-purple-50 hover:border-purple-300"
-                    }`}
-                  >
-                    {item}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-4">
-              <Label className="text-lg md:text-xl font-bold text-gray-800 flex items-center gap-2">
-                <Wallet className="w-5 h-5 text-green-500" />
-                3. 예산은 어느 정도 생각하세요?
-              </Label>
-              <div className="flex flex-wrap gap-3">
-                {BUDGETS.map(item => (
-                  <Button 
-                    key={item} 
-                    variant={additionalInfo.budget === item ? "default" : "outline"} 
-                    onClick={() => handleAdditionalInfoChange('budget', item)}
-                    className={`rounded-full px-6 py-3 transition-all duration-300 ${
-                      additionalInfo.budget === item 
-                        ? "bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg" 
-                        : "border-green-200 text-gray-700 hover:bg-green-50 hover:border-green-300"
-                    }`}
-                  >
-                    {item}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-4">
-              <Label className="text-lg md:text-xl font-bold text-gray-800 flex items-center gap-2">
-                <Clock className="w-5 h-5 text-rose-500" />
-                4. 원하는 시간대는 언제인가요?
-              </Label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {TIME_SLOTS.map((item, index) => (
-                  <Button 
-                    key={item} 
-                    variant={additionalInfo.time_slot === item ? "default" : "outline"} 
-                    onClick={() => handleAdditionalInfoChange('time_slot', item)}
-                    className={`relative overflow-hidden rounded-2xl px-4 py-4 transition-all duration-300 transform hover:scale-105 ${
-                      additionalInfo.time_slot === item 
-                        ? "bg-gradient-to-br from-rose-400 via-pink-500 to-purple-500 hover:from-rose-500 hover:via-pink-600 hover:to-purple-600 text-white shadow-xl border-0" 
-                        : "border-2 border-pink-200 text-gray-700 hover:bg-gradient-to-br hover:from-pink-50 hover:to-rose-50 hover:border-pink-300 hover:shadow-lg bg-white/50 backdrop-blur-sm"
-                    }`}
-                  >
-                    <div className="flex flex-col items-center space-y-1">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                        additionalInfo.time_slot === item 
-                          ? "bg-white/20" 
-                          : "bg-gradient-to-br from-pink-100 to-rose-200"
-                      }`}>
-                        <Clock className={`w-4 h-4 ${
-                          additionalInfo.time_slot === item ? "text-white" : "text-rose-500"
-                        }`} />
-                      </div>
-                      <span className="text-sm font-medium text-center leading-tight">{item}</span>
-                    </div>
-                    {additionalInfo.time_slot === item && (
-                      <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
-                    )}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <div className="pt-6 flex flex-col md:flex-row justify-end gap-3">
-              <Button 
-                onClick={() => { setIsCollectingInfo(false); setMessages([]); }} 
-                variant="ghost"
-                className="rounded-full px-6 py-3 text-gray-600 hover:bg-gray-100"
-              >
-                취소
-              </Button>
-              <Button 
-                onClick={handleFullSubmit} 
-                disabled={isLoading} 
-                className="bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white rounded-full px-8 py-3 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105"
-              >
-                <UserCheck className="h-4 w-4 mr-2" />
-                {isLoading ? "결제 처리 중..." : "AI 추천 요청 (1,000원)"}
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  const renderStepContent = () => {
+    const currentStepId = steps[currentStepIndex];
 
-  const ButtonMessage = ({ message, onButtonClick }) => {
-    if (!message || message.message_type !== 'buttons') return null;
-    
-    return (
-      <div className="bg-gradient-to-br from-white/90 to-pink-50/90 backdrop-blur-lg p-6 rounded-3xl shadow-xl border-2 border-pink-200/50">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-gradient-to-br from-rose-400 to-pink-500 rounded-full flex items-center justify-center shadow-lg">
-            <MapPin className="w-5 h-5 text-white" />
-          </div>
-          <p className="text-lg font-semibold text-gray-800 whitespace-pre-line">{message.question}</p>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-          {message.buttons?.map((button, index) => (
-            <button
-              key={index}
-              onClick={() => onButtonClick(button.value)}
-              className="group relative overflow-hidden bg-white/80 hover:bg-gradient-to-br hover:from-rose-400 hover:via-pink-500 hover:to-purple-500 border-2 border-pink-200 hover:border-transparent text-gray-700 hover:text-white rounded-2xl px-4 py-4 transition-all duration-300 transform hover:scale-105 hover:shadow-xl backdrop-blur-sm"
-            >
-              <div className="flex flex-col items-center space-y-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-pink-100 to-rose-200 group-hover:bg-white/20 rounded-full flex items-center justify-center transition-all duration-300">
-                  <Heart className="w-4 h-4 text-rose-500 group-hover:text-white transition-colors duration-300" />
-                </div>
-                <span className="text-sm font-medium text-center leading-tight">{button.text}</span>
-              </div>
-              <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-rose-100 via-pink-50 to-purple-100 relative overflow-hidden">
-      {/* 배경 장식 요소들 */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-10 -left-10 w-72 h-72 bg-gradient-to-br from-pink-300/20 to-rose-400/20 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute top-1/2 -right-20 w-96 h-96 bg-gradient-to-br from-purple-300/20 to-pink-400/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
-      </div>
-
-      {/* 헤더 */}
-      <div className="relative p-4 md:p-6 pl-4 md:pl-20 border-b border-pink-200/50 bg-white/80 backdrop-blur-lg shadow-xl">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3 md:gap-4">
-            <div className="flex items-center space-x-2">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-rose-400 to-pink-500 rounded-2xl flex items-center justify-center shadow-xl transform rotate-12 hover:rotate-0 transition-transform duration-300">
-                <Heart className="w-5 h-5 md:w-6 md:h-6 text-white" />
-              </div>
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-purple-400 to-pink-500 rounded-2xl flex items-center justify-center shadow-xl transform -rotate-12 hover:rotate-0 transition-transform duration-300">
-                <MapPin className="w-5 h-5 md:w-6 md:h-6 text-white" />
-              </div>
-            </div>
-            <div>
-              <h1 className="text-xl md:text-3xl font-black bg-gradient-to-r from-rose-600 to-pink-600 bg-clip-text text-transparent">
-                AI 데이트 코스 추천
-              </h1>
-              <p className="text-gray-600 text-sm md:text-base flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-pink-500" />
-                원하는 데이트 스타일을 알려주세요! 💕
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col gap-3 w-full md:w-auto">
-            {/* 잔액 정보 - 채팅 기록이 없거나 현재 세션이 없을 때 표시 */}
-            {(sessions.length === 0 || !currentSessionId) && (
-              <div className="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-cyan-50 px-4 py-3 rounded-full border border-blue-200 shadow-lg backdrop-blur-sm">
-                <Wallet className="h-4 w-4 text-blue-600" />
-                <span className="text-sm font-medium text-blue-700">
-                  현재 잔액: {balanceLoading ? "로딩중..." : balance ? formatCurrency(balance.total_balance) : "0원"}
-                </span>
-              </div>
-            )}
-            
-            <div className="flex gap-2 md:gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowSessions(!showSessions)}
-                className="flex items-center gap-2 bg-white/80 backdrop-blur-sm border-pink-200 text-pink-600 hover:bg-pink-50 rounded-full shadow-lg transition-all duration-300"
-              >
-                <List className="h-4 w-4" />
-                <span className="hidden md:inline">채팅 기록</span> ({sessions.length})
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setCurrentSessionId(null);
-                  setMessages([]);
-                  setQuickReplies([]);
-                  setCanRecommend(false);
-                  prepareNewSessionForm(fullUserProfile);
-                }}
-                className="flex items-center gap-2 bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white border-0 rounded-full shadow-lg transition-all duration-300"
-              >
-                <MessageCircle className="h-4 w-4" />
-                <span className="hidden md:inline">새 채팅</span>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 세션 목록 */}
-      {showSessions && (
-        <div className="relative bg-white/90 backdrop-blur-lg border-b border-pink-200/50 p-4 md:p-6 shadow-lg">
-          <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Heart className="w-5 h-5 text-pink-500" />
-            채팅 기록
-          </h3>
-          <div className="space-y-3 max-h-48 overflow-y-auto">
-            {sessions.length > 0 ? (
-              sessions.map((session) => (
-                <div
-                  key={session.session_id}
-                  className="flex items-center justify-between p-4 bg-gradient-to-r from-pink-50/80 to-rose-50/80 backdrop-blur-sm border border-pink-100 rounded-2xl cursor-pointer hover:shadow-lg hover:from-pink-100/80 hover:to-rose-100/80 transition-all duration-300 transform hover:scale-[1.02]"
-                  onClick={() => loadSession(session.session_id)}
-                >
-                  <div className="flex-1">
-                    <p className="font-semibold text-sm text-gray-800">{session.session_title}</p>
-                    <p className="text-xs text-gray-600 truncate mt-1">{session.preview_message}</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                        session.session_status === 'COMPLETED' 
-                          ? 'bg-gradient-to-r from-green-400 to-emerald-500 text-white' 
-                          : 'bg-gradient-to-r from-blue-400 to-cyan-500 text-white'
-                      }`}>
-                        {session.session_status === 'COMPLETED' ? '완료' : '진행중'}
-                      </span>
-                      {session.has_course && (
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gradient-to-r from-pink-400 to-rose-500 text-white">
-                          <Sparkles className="h-3 w-3 mr-1" />
-                          코스 완성
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-xs text-gray-500 flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {new Date(session.last_activity_at).toLocaleDateString()}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-8">
-                <div className="w-16 h-16 mx-auto bg-gradient-to-br from-pink-100 to-purple-200 rounded-full flex items-center justify-center mb-4">
-                  <Heart className="w-8 h-8 text-pink-500" />
-                </div>
-                <p className="text-gray-500">아직 채팅 기록이 없습니다 💕</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* 메시지 영역 */}
-      <div className="relative flex-1 p-4 md:p-6 overflow-auto">
-        {isCollectingInfo || (messages.length === 0 && !currentSessionId) ? (
-          renderAdditionalInfoForm()
-        ) : (
-          <div className="space-y-6 max-w-4xl mx-auto">
+    if (showAIChat || isChatStep) {
+      // AI 채팅 인터페이스 (전체 화면 활용)
+      return (
+        <div className="w-full h-full flex flex-col">
+            {/* 메시지 영역 - 입력창을 위한 공간 확보 */}
+            <div className="flex-1 p-6 space-y-4 overflow-y-auto bg-gray-50 pb-32">
+            {messages.filter(m => m.course_data).length > 0 && 
+              console.log('[DEBUG] Messages with course_data:', messages.filter(m => m.course_data))}
             {messages.map((message) => (
-              <div key={message.message_id} className={`flex ${message.message_type === "USER" ? "justify-end" : "justify-start"} mb-6`}>
-                <div className={`max-w-[85%] md:max-w-[80%] ${message.message_type === "USER" ? "order-1" : "order-2"}`}>
-                  <Card className={`border-0 shadow-xl hover:shadow-2xl transition-all duration-300 ${
-                    message.message_type === "USER" 
-                      ? "bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-3xl rounded-br-lg" 
-                      : "bg-white/90 backdrop-blur-lg rounded-3xl rounded-bl-lg"
-                  }`}>
-                    <CardContent className="p-4 md:p-6">
-                      <div className="flex items-start gap-3 md:gap-4">
-                        <div className={`flex-shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center shadow-lg ${
-                          message.message_type === "USER" 
-                            ? "bg-white/20 backdrop-blur-sm" 
-                            : "bg-gradient-to-br from-purple-400 to-pink-500"
-                        }`}>
-                          {message.message_type === "USER" ? (
-                            <User className="h-5 h-5 md:h-6 md:w-6 text-white" />
-                          ) : (
-                            <Bot className="h-5 h-5 md:h-6 md:w-6 text-white" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className={`mb-2 text-xs md:text-sm font-medium ${
-                            message.message_type === "USER" 
-                              ? "text-white/80" 
-                              : "text-gray-600"
-                          }`}>
-                            {message.message_type === "USER" ? "나" : "AI 어시스턴트"}
+              <div key={message.message_id} className={`flex items-start gap-3 ${message.message_type === "USER" ? "justify-end" : ""}`}>
+                {message.message_type === "ASSISTANT" && (
+                  <div className="w-8 h-8 bg-primary-pink rounded-full flex items-center justify-center flex-shrink-0">
+                    <Bot className="w-4 h-4 text-white" />
+                  </div>
+                )}
+                <div
+                  className={`rounded-2xl p-4 max-w-2xl shadow-sm ${
+                    message.message_type === "ASSISTANT"
+                      ? "bg-white text-text-primary border border-brand-border"
+                      : "bg-primary-pink text-white"
+                  }`}
+                >
+                  {message.message_type === "ASSISTANT" && typeof message.message_content === 'object' && (message.message_content?.message_type === 'buttons' || message.message_content?.message_type === 'category_checkbox') ? (
+                    <ButtonMessage 
+                      message={message.message_content} 
+                      onButtonClick={(value) => {
+                        if (currentSessionId) {
+                          sendMessage(value);
+                        }
+                      }} 
+                    />
+                  ) : (
+                    <div className="whitespace-pre-line leading-relaxed">
+                      {typeof message.message_content === 'object' ? JSON.stringify(message.message_content) : 
+                        message.message_content?.split('\n').map((line, index) => (
+                          <div key={index} className="mb-2 last:mb-0">
+                            {line.trim() || <br />}
                           </div>
-                          {message.message_type === "ASSISTANT" && typeof message.message_content === 'object' && message.message_content.message_type === 'buttons' ? (
-                            <ButtonMessage 
-                              message={message.message_content} 
-                              onButtonClick={(value) => {
-                                if (currentSessionId) {
-                                  sendMessage(value);
-                                } else {
-                                  setInput(value);
-                                  setTimeout(() => {
-                                    handleFullSubmit();
-                                  }, 100);
-                                }
-                              }} 
-                            />
-                          ) : (
-                            <div className={`whitespace-pre-line text-sm md:text-base leading-relaxed ${
-                              message.message_type === "USER" 
-                                ? "text-white" 
-                                : "text-gray-800"
-                            }`}>
-                              {typeof message.message_content === 'object' ? JSON.stringify(message.message_content) : message.message_content}
-                            </div>
-                          )}
-                        
-                          {message.message_type === "ASSISTANT" && message.course_data && (
-                            <div className="mt-8 pt-8 border-t-2 border-gradient-to-r from-pink-200 to-purple-200">
-                              <div className="space-y-8">
-                                {message.course_data.course?.results?.sunny_weather && (
-                                  <div className="bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50 p-8 rounded-3xl border-2 border-yellow-200/50 shadow-xl backdrop-blur-lg">
-                                    <div className="text-center mb-8">
-                                      <div className="flex items-center justify-center space-x-3 mb-4">
-                                        <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 via-orange-400 to-amber-500 rounded-2xl flex items-center justify-center shadow-xl transform rotate-12 hover:rotate-0 transition-transform duration-300">
-                                          <span className="text-white text-2xl">☀️</span>
-                                        </div>
-                                      </div>
-                                      <h4 className="text-3xl font-black bg-gradient-to-r from-yellow-600 via-orange-600 to-amber-600 bg-clip-text text-transparent mb-2">
-                                        맑은 날 추천 코스
-                                      </h4>
-                                      <p className="text-orange-600 font-medium">햇살이 내리쬐는 완벽한 데이트를 위해 💕</p>
-                                    </div>
-                                    <div className="grid gap-6">
-                                      {message.course_data.course.results.sunny_weather.map((course: any, index: number) => (
-                                        <div 
-                                          key={index} 
-                                          className="group bg-white/80 backdrop-blur-lg rounded-2xl cursor-pointer hover:shadow-2xl transition-all duration-500 border-2 border-yellow-200/50 hover:border-orange-300 transform hover:scale-[1.02] hover:-translate-y-1 overflow-hidden"
-                                          onClick={() => openCourseDetail(course, 'sunny', index)}
-                                        >
-                                          <div className={`h-2 bg-gradient-to-r ${
-                                            index % 3 === 0 ? 'from-yellow-400 to-orange-500' :
-                                            index % 3 === 1 ? 'from-orange-400 to-amber-500' :
-                                            'from-amber-400 to-yellow-500'
-                                          }`}></div>
-                                          
-                                          <div className="p-6">
-                                            <div className="flex items-center justify-between mb-6">
-                                              <div className="flex items-center gap-4">
-                                                <div className={`w-12 h-12 bg-gradient-to-br ${
-                                                  index % 3 === 0 ? 'from-yellow-400 to-orange-500' :
-                                                  index % 3 === 1 ? 'from-orange-400 to-amber-500' :
-                                                  'from-amber-400 to-yellow-500'
-                                                } rounded-xl flex items-center justify-center text-white text-lg font-black shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                                                  {index + 1}
-                                                </div>
-                                                <div>
-                                                  <h5 className="text-xl font-bold text-gray-800 mb-1">맑은 날 코스 {index + 1}</h5>
-                                                  <div className="flex items-center gap-1">
-                                                    {[...Array(5)].map((_, i) => (
-                                                      <Star key={i} className="w-3 h-3 text-yellow-400 fill-current" />
-                                                    ))}
-                                                  </div>
-                                                </div>
-                                              </div>
-                                              <div className="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white px-4 py-2 rounded-full font-medium transition-all duration-300 shadow-lg group-hover:shadow-xl">
-                                                <span className="text-sm">상세보기</span>
-                                                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" />
-                                              </div>
-                                            </div>
-                                            
-                                            {course.places && course.places.length > 0 && (
-                                              <div className="mb-6">
-                                                <div className="flex items-center gap-3 mb-3">
-                                                  <div className="w-8 h-8 bg-gradient-to-br from-orange-100 to-yellow-200 rounded-full flex items-center justify-center">
-                                                    <MapPin className="w-4 h-4 text-orange-600" />
-                                                  </div>
-                                                  <span className="font-semibold text-gray-800">
-                                                    {course.places.length}개의 특별한 장소
-                                                  </span>
-                                                </div>
-                                                <div className="bg-gradient-to-r from-white to-orange-50 p-4 rounded-xl border border-orange-100 shadow-inner">
-                                                  <div className="text-gray-700 font-medium text-center">
-                                                    {course.places.map((p: any) => p.place_info?.name).join(' → ')}
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            )}
-                                            
-                                            {course.recommendation_reason && (
-                                              <div className="bg-gradient-to-br from-yellow-50 to-orange-50 p-5 rounded-xl border border-yellow-200 shadow-inner">
-                                                <div className="flex items-start gap-3">
-                                                  <div className="w-8 h-8 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                                                    <Sparkles className="w-4 h-4 text-white" />
-                                                  </div>
-                                                  <div>
-                                                    <p className="font-semibold text-orange-800 mb-2">추천 이유</p>
-                                                    <p className="text-gray-700 leading-relaxed text-sm">
-                                                      {course.recommendation_reason.substring(0, 150)}...
-                                                    </p>
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
+                        ))
+                      }
+                    </div>
+                  )}
 
-                                {message.course_data.course?.results?.rainy_weather && (
-                                  <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-8 rounded-3xl border-2 border-blue-200/50 shadow-xl backdrop-blur-lg">
-                                    <div className="text-center mb-8">
-                                      <div className="flex items-center justify-center space-x-3 mb-4">
-                                        <div className="w-16 h-16 bg-gradient-to-br from-blue-400 via-indigo-500 to-purple-500 rounded-2xl flex items-center justify-center shadow-xl transform rotate-12 hover:rotate-0 transition-transform duration-300">
-                                          <span className="text-white text-2xl">🌧️</span>
-                                        </div>
-                                      </div>
-                                      <h4 className="text-3xl font-black bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">
-                                        비오는 날 추천 코스
-                                      </h4>
-                                      <p className="text-indigo-600 font-medium">아늑한 실내에서 로맨틱한 시간을 💕</p>
-                                    </div>
-                                    <div className="grid gap-6">
-                                      {message.course_data.course.results.rainy_weather.map((course: any, index: number) => (
-                                        <div 
-                                          key={index} 
-                                          className="group bg-white/80 backdrop-blur-lg rounded-2xl cursor-pointer hover:shadow-2xl transition-all duration-500 border-2 border-blue-200/50 hover:border-indigo-300 transform hover:scale-[1.02] hover:-translate-y-1 overflow-hidden"
-                                          onClick={() => openCourseDetail(course, 'rainy', index)}
-                                        >
-                                          <div className={`h-2 bg-gradient-to-r ${
-                                            index % 3 === 0 ? 'from-blue-400 to-indigo-500' :
-                                            index % 3 === 1 ? 'from-indigo-400 to-purple-500' :
-                                            'from-purple-400 to-blue-500'
-                                          }`}></div>
-                                          
-                                          <div className="p-6">
-                                            <div className="flex items-center justify-between mb-6">
-                                              <div className="flex items-center gap-4">
-                                                <div className={`w-12 h-12 bg-gradient-to-br ${
-                                                  index % 3 === 0 ? 'from-blue-400 to-indigo-500' :
-                                                  index % 3 === 1 ? 'from-indigo-400 to-purple-500' :
-                                                  'from-purple-400 to-blue-500'
-                                                } rounded-xl flex items-center justify-center text-white text-lg font-black shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                                                  {index + 1}
-                                                </div>
-                                                <div>
-                                                  <h5 className="text-xl font-bold text-gray-800 mb-1">비오는 날 코스 {index + 1}</h5>
-                                                  <div className="flex items-center gap-1">
-                                                    {[...Array(5)].map((_, i) => (
-                                                      <Star key={i} className="w-3 h-3 text-blue-400 fill-current" />
-                                                    ))}
-                                                  </div>
-                                                </div>
-                                              </div>
-                                              <div className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white px-4 py-2 rounded-full font-medium transition-all duration-300 shadow-lg group-hover:shadow-xl">
-                                                <span className="text-sm">상세보기</span>
-                                                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" />
-                                              </div>
-                                            </div>
-                                            
-                                            {course.places && course.places.length > 0 && (
-                                              <div className="mb-6">
-                                                <div className="flex items-center gap-3 mb-3">
-                                                  <div className="w-8 h-8 bg-gradient-to-br from-blue-100 to-indigo-200 rounded-full flex items-center justify-center">
-                                                    <MapPin className="w-4 h-4 text-blue-600" />
-                                                  </div>
-                                                  <span className="font-semibold text-gray-800">
-                                                    {course.places.length}개의 특별한 장소
-                                                  </span>
-                                                </div>
-                                                <div className="bg-gradient-to-r from-white to-blue-50 p-4 rounded-xl border border-blue-100 shadow-inner">
-                                                  <div className="text-gray-700 font-medium text-center">
-                                                    {course.places.map((p: any) => p.place_info?.name).join(' → ')}
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            )}
-                                            
-                                            {course.recommendation_reason && (
-                                              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-5 rounded-xl border border-blue-200 shadow-inner">
-                                                <div className="flex items-start gap-3">
-                                                  <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                                                    <Sparkles className="w-4 h-4 text-white" />
-                                                  </div>
-                                                  <div>
-                                                    <p className="font-semibold text-blue-800 mb-2">추천 이유</p>
-                                                    <p className="text-gray-700 leading-relaxed text-sm">
-                                                      {course.recommendation_reason.substring(0, 150)}...
-                                                    </p>
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-
-                                <div className="pt-8 text-center">
-                                  <Button
-                                    className="bg-gradient-to-r from-rose-500 via-pink-500 to-purple-500 hover:from-rose-600 hover:via-pink-600 hover:to-purple-600 text-white px-8 py-4 text-lg rounded-full shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105"
-                                    onClick={() => saveCourse(message.course_data)}
-                                  >
-                                    <Save className="h-5 w-5 mr-3" />
-                                    이 코스 저장하기
-                                    <Heart className="h-4 w-4 ml-3 animate-pulse" />
-                                  </Button>
-                                </div>
+                  {(() => {
+                    if ((message.message_type === "ASSISTANT" || message.message_type === "COURSE_RECOMMENDATION") && message.course_data) {
+                      console.log('[DEBUG] Course data found:', {
+                        type: message.message_type,
+                        hasResults: !!message.course_data.results,
+                        hasSunny: !!message.course_data.results?.sunny_weather,
+                        sunnyCount: message.course_data.results?.sunny_weather?.length
+                      });
+                      return true;
+                    }
+                    return false;
+                  })() && (
+                    <div className="mt-8 pt-8 border-t-2 border-gradient-to-r from-pink-200 to-purple-200">
+                      <div className="space-y-8">
+                        {message.course_data.results?.sunny_weather && (
+                          <div className="bg-white border border-brand-border rounded-3xl shadow-lg p-6">
+                            <div className="text-center mb-6">
+                              <div className="w-12 h-12 bg-secondary-pink rounded-full flex items-center justify-center mx-auto mb-3">
+                                <span className="text-2xl">☀️</span>
                               </div>
+                              <h4 className="text-2xl font-bold text-text-primary mb-2">
+                                맑은 날 추천 코스
+                              </h4>
+                              <p className="text-text-secondary">완벽한 야외 데이트를 위한 추천</p>
                             </div>
-                          )}
+                            <div className="grid gap-6">
+                              {message.course_data.results.sunny_weather.map((course: any, index: number) => (
+                                <div 
+                                  key={index} 
+                                  className="bg-white border border-brand-border rounded-2xl cursor-pointer hover:shadow-lg transition-all duration-300 hover:border-primary-pink"
+                                  onClick={() => openCourseDetail(course, 'sunny', index)}
+                                >
+                                  <div className="p-6">
+                                    <div className="flex items-center justify-between mb-4">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-primary-pink rounded-full flex items-center justify-center text-white font-bold">
+                                          {index + 1}
+                                        </div>
+                                        <div>
+                                          <h5 className="text-lg font-bold text-text-primary">코스 {index + 1}</h5>
+                                          <p className="text-sm text-text-secondary">맑은 날 추천</p>
+                                        </div>
+                                      </div>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="border-primary-pink text-primary-pink hover:bg-primary-pink hover:text-white"
+                                      >
+                                        상세보기
+                                      </Button>
+                                    </div>
+                                    
+                                    {course.places && course.places.length > 0 && (
+                                      <div className="mb-4">
+                                        <div className="flex items-center gap-2 mb-3">
+                                          <MapPin className="w-4 h-4 text-primary-pink" />
+                                          <span className="font-medium text-text-primary">
+                                            {course.places.length}개 장소
+                                          </span>
+                                        </div>
+                                        <div className="bg-gray-50 p-3 rounded-xl">
+                                          <div className="text-text-secondary text-sm">
+                                            {course.places.map((p: any) => p.place_info?.name).join(' → ')}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                    
+                                    {course.recommendation_reason && (
+                                      <div className="bg-secondary-pink p-4 rounded-xl">
+                                        <div className="flex items-start gap-3">
+                                          <Sparkles className="w-4 h-4 text-primary-pink mt-0.5" />
+                                          <div>
+                                            <p className="font-medium text-text-primary mb-1">추천 이유</p>
+                                            <p className="text-text-secondary text-sm leading-relaxed">
+                                              {course.recommendation_reason.substring(0, 120)}...
+                                            </p>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {message.course_data.results?.rainy_weather && (
+                          <div className="bg-white border border-brand-border rounded-3xl shadow-lg p-6">
+                            <div className="text-center mb-6">
+                              <div className="w-12 h-12 bg-soft-purple rounded-full flex items-center justify-center mx-auto mb-3">
+                                <span className="text-2xl">🌧️</span>
+                              </div>
+                              <h4 className="text-2xl font-bold text-text-primary mb-2">
+                                비오는 날 추천 코스
+                              </h4>
+                              <p className="text-text-secondary">아늑한 실내 데이트를 위한 추천</p>
+                            </div>
+                            <div className="grid gap-6">
+                              {message.course_data.results.rainy_weather.map((course: any, index: number) => (
+                                <div 
+                                  key={index} 
+                                  className="bg-white border border-brand-border rounded-2xl cursor-pointer hover:shadow-lg transition-all duration-300 hover:border-light-purple"
+                                  onClick={() => openCourseDetail(course, 'rainy', index)}
+                                >
+                                  <div className="p-6">
+                                    <div className="flex items-center justify-between mb-4">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-light-purple rounded-full flex items-center justify-center text-white font-bold">
+                                          {index + 1}
+                                        </div>
+                                        <div>
+                                          <h5 className="text-lg font-bold text-text-primary">코스 {index + 1}</h5>
+                                          <p className="text-sm text-text-secondary">비오는 날 추천</p>
+                                        </div>
+                                      </div>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="border-light-purple text-light-purple hover:bg-light-purple hover:text-white"
+                                      >
+                                        상세보기
+                                      </Button>
+                                    </div>
+                                    
+                                    {course.places && course.places.length > 0 && (
+                                      <div className="mb-4">
+                                        <div className="flex items-center gap-2 mb-3">
+                                          <MapPin className="w-4 h-4 text-light-purple" />
+                                          <span className="font-medium text-text-primary">
+                                            {course.places.length}개 장소
+                                          </span>
+                                        </div>
+                                        <div className="bg-gray-50 p-3 rounded-xl">
+                                          <div className="text-text-secondary text-sm">
+                                            {course.places.map((p: any) => p.place_info?.name).join(' → ')}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                    
+                                    {course.recommendation_reason && (
+                                      <div className="bg-soft-purple p-4 rounded-xl">
+                                        <div className="flex items-start gap-3">
+                                          <Sparkles className="w-4 h-4 text-light-purple mt-0.5" />
+                                          <div>
+                                            <p className="font-medium text-text-primary mb-1">추천 이유</p>
+                                            <p className="text-text-secondary text-sm leading-relaxed">
+                                              {course.recommendation_reason.substring(0, 120)}...
+                                            </p>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="pt-6 text-center">
+                          <Button
+                            className="bg-primary-pink hover:bg-primary-pink/90 text-white px-8 py-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-300"
+                            onClick={() => saveCourse(message.course_data)}
+                          >
+                            <Save className="h-4 w-4 mr-2" />
+                            코스 저장하기
+                          </Button>
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
+                    </div>
+                  )}
                 </div>
+                {message.message_type === "USER" && (
+                  <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
+                    <User className="w-4 h-4 text-white" />
+                  </div>
+                )}
               </div>
             ))}
-            
+
             {quickReplies.length > 0 && (
               <div className="flex flex-wrap gap-2 justify-center">
                 {quickReplies.map((reply, index) => (
@@ -1189,7 +1118,7 @@ export default function CoursePage() {
               </div>
             )}
             
-            {canRecommend && currentSessionId && (
+            {canRecommend && currentSessionId && !showAIChat && !isCollectingInfo && messages.length === 10000 && (
               <div className="text-center">
                 <Button
                   onClick={startRecommendation}
@@ -1201,191 +1130,851 @@ export default function CoursePage() {
                 </Button>
               </div>
             )}
-            
-            <div ref={messagesEndRef} />
-          </div>
-        )}
-      </div>
 
-      {/* 입력 영역 */}
-      <div className="p-6 border-t border-gray-200 bg-white">
-        <div className="flex gap-3 max-w-4xl mx-auto">
-          <Textarea
-            className="flex-1 min-h-[60px] resize-none"
-            placeholder={(() => {
-              // 마지막 메시지가 버튼인지만 확인
-              const lastMessage = messages[messages.length - 1];
-              const hasButtons = lastMessage && 
-                lastMessage.message_type === "ASSISTANT" &&
-                typeof lastMessage.message_content === 'object' &&
-                lastMessage.message_content?.message_type === 'buttons';
-              return hasButtons ? "위 버튼을 선택해주세요" : currentSessionId ? "메시지를 입력하세요..." : "새 추천을 받으려면 '새 채팅' 버튼을 눌러주세요.";
-            })()}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={isLoading || !currentSessionId || (() => {
-              // 마지막 메시지가 버튼인지만 확인
-              const lastMessage = messages[messages.length - 1];
-              return lastMessage && 
-                lastMessage.message_type === "ASSISTANT" &&
-                typeof lastMessage.message_content === 'object' &&
-                lastMessage.message_content?.message_type === 'buttons';
-            })()}
-          />
-          <Button
-            onClick={currentSessionId ? () => sendMessage() : handleFullSubmit}
-            disabled={isLoading || !input.trim() || (() => {
-              // 마지막 메시지가 버튼인지만 확인
-              const lastMessage = messages[messages.length - 1];
-              return lastMessage && 
-                lastMessage.message_type === "ASSISTANT" &&
-                typeof lastMessage.message_content === 'object' &&
-                lastMessage.message_content?.message_type === 'buttons';
-            })()}
-            className="bg-pink-600 hover:bg-pink-700 px-6"
-          >
-            <Send className="h-5 w-5" />
-          </Button>
-        </div>
-      </div>
-
-      {/* 코스 상세 보기 모달 */}
-      {showCourseModal && selectedCourse && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="relative bg-gradient-to-br from-white via-pink-50/50 to-purple-50/50 backdrop-blur-lg rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl border border-pink-200/50">
-            {/* 헤더 그라데이션 */}
-            <div className="h-3 bg-gradient-to-r from-rose-400 via-pink-500 to-purple-500"></div>
-            
-            {/* 스크롤 가능한 컨텐츠 */}
-            <div className="overflow-y-auto max-h-[calc(90vh-3rem)] p-8">
-              {/* 헤더 */}
-              <div className="flex items-center justify-between mb-8">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-rose-400 to-pink-500 rounded-2xl flex items-center justify-center shadow-xl">
-                    <Heart className="w-6 h-6 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-black bg-gradient-to-r from-rose-600 to-pink-600 bg-clip-text text-transparent">
-                      코스 상세 정보
-                    </h3>
-                    <p className="text-pink-600 font-medium">완벽한 데이트를 위한 특별한 코스</p>
+            {isLoading && (
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 bg-primary-pink rounded-full flex items-center justify-center flex-shrink-0">
+                  <Bot className="w-4 h-4 text-white" />
+                </div>
+                <div className="bg-white rounded-2xl p-4 border border-brand-border">
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div
+                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      style={{ animationDelay: "0.1s" }}
+                    ></div>
+                    <div
+                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      style={{ animationDelay: "0.2s" }}
+                    ></div>
                   </div>
                 </div>
-                <button 
-                  onClick={() => setShowCourseModal(false)}
-                  className="w-10 h-10 bg-gradient-to-br from-gray-100 to-gray-200 hover:from-red-100 hover:to-pink-100 rounded-full flex items-center justify-center text-gray-600 hover:text-red-500 transition-all duration-300 shadow-lg hover:shadow-xl"
+              </div>
+            )}
+            
+            {/* 오류 메시지 표시 */}
+            {errorMessage && (
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-white text-lg">⚠️</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-red-800 mb-2">오류가 발생했습니다</h3>
+                    <p className="text-red-700 mb-4">{errorMessage}</p>
+                    <div className="flex gap-3">
+                      {errorType === 'sendMessage' && (
+                        <Button
+                          onClick={() => {
+                            setErrorMessage(null);
+                            setErrorType(null);
+                            // 마지막 사용자 메시지 다시 전송
+                            const lastUserMessage = messages.filter(m => m.message_type === 'USER').pop();
+                            if (lastUserMessage) {
+                              sendMessage(lastUserMessage.message_content);
+                            }
+                          }}
+                          className="bg-primary-pink hover:bg-primary-pink/90 text-white"
+                        >
+                          메시지 다시 전송
+                        </Button>
+                      )}
+                      {(errorType === 'recommendation' || (!errorType && errorMessage)) && (
+                        <Button
+                          onClick={() => {
+                            setErrorMessage(null);
+                            setErrorType(null);
+                            setRetryRecommendation(false);
+                            // 새로운 세션 시작 또는 마지막 상태에서 다시 시도
+                            if (currentSessionId) {
+                              const lastMessage = messages[messages.length - 1];
+                              if (lastMessage?.message_type === 'USER') {
+                                sendMessage(lastMessage.message_content);
+                              }
+                            }
+                          }}
+                          className="bg-primary-pink hover:bg-primary-pink/90 text-white"
+                        >
+                          다시 시도
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setErrorMessage(null);
+                          setErrorType(null);
+                          setRetryRecommendation(false);
+                        }}
+                        className="border-primary-pink text-primary-pink hover:bg-secondary-pink"
+                      >
+                        닫기
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* 자동 스크롤을 위한 참조 */}
+            <div ref={messagesEndRef} />
+            </div>
+          
+          {/* 채팅 입력 영역 또는 완료 메시지 */}
+          {chatInputDisabled && messages.some(m => m.course_data) ? (
+            /* 완료된 세션 - 완료 메시지 표시 */
+            <div className="fixed bottom-0 left-0 right-0 p-4 border-t border-gray-200 bg-secondary-pink shadow-lg z-10">
+              <div className="max-w-4xl mx-auto">
+                <div className="w-full justify-start bg-white border border-primary-pink rounded-md h-10 px-4 py-2 flex items-center gap-3">
+                  <div className="w-6 h-6 bg-primary-pink rounded-full flex items-center justify-center">
+                    <span className="text-white text-sm">✓</span>
+                  </div>
+                  <span className="text-primary-pink font-bold">데이트 코스 추천이 완료되었습니다!</span>
+                </div>
+              </div>
+            </div>
+          ) : !chatInputDisabled ? (
+            /* 진행 중인 세션 - 정상 채팅창 */
+            <div className="fixed bottom-0 left-0 right-0 p-4 border-t border-gray-200 bg-white shadow-lg z-10">
+              <div className="flex gap-3 max-w-4xl mx-auto">
+                <Input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="채팅에 메시지를 입력하세요..."
+                  className="flex-1 focus-visible:ring-primary-pink rounded-full px-6 py-3 border-2 border-brand-border"
+                  onKeyPress={(e) => e.key === "Enter" && sendMessage()}
+                />
+                <Button
+                  className="bg-primary-pink hover:bg-primary-pink/90 text-white rounded-full px-6 shadow-lg"
+                  onClick={() => sendMessage()}
                 >
-                  <X className="h-5 w-5" />
-                </button>
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-full max-w-4xl mx-auto">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">{stepTitles[currentStepId]}</h2>
+          <p className="text-lg text-text-secondary">정확한 추천을 위해 몇 가지만 알려주세요</p>
+        </div>
+
+        <div className="mt-10">
+          {
+            {
+              age: (
+                <div className="w-full max-w-md mx-auto space-y-8">
+                  <div className="text-center">
+                    <p className="text-6xl font-bold text-primary-pink mb-4">{additionalInfo.age}세</p>
+                    <p className="text-text-secondary">슬라이더를 움직여 나이를 선택해주세요</p>
+                  </div>
+                  <div className="px-4">
+                    <Slider
+                      defaultValue={[additionalInfo.age]}
+                      min={18}
+                      max={80}
+                      step={1}
+                      onValueChange={(v) => handleAdditionalInfoChange('age', String(v[0]))}
+                      className="[&>*]:bg-primary-pink"
+                    />
+                    <div className="flex justify-between text-sm text-text-secondary mt-2">
+                      <span>18세</span>
+                      <span>80세</span>
+                    </div>
+                  </div>
+                </div>
+              ),
+              gender: (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-lg mx-auto">
+                  <StepCard isSelected={additionalInfo.gender === "male"} onClick={() => handleAdditionalInfoChange('gender', 'male')}>
+                    <div className="space-y-3">
+                      <div className="w-16 h-16 bg-blue-100 rounded-full mx-auto flex items-center justify-center">
+                        <span className="text-2xl">👨</span>
+                      </div>
+                      <span className="text-xl font-semibold">남성</span>
+                    </div>
+                  </StepCard>
+                  <StepCard isSelected={additionalInfo.gender === "female"} onClick={() => handleAdditionalInfoChange('gender', 'female')}>
+                    <div className="space-y-3">
+                      <div className="w-16 h-16 bg-secondary-pink rounded-full mx-auto flex items-center justify-center">
+                        <span className="text-2xl">👩</span>
+                      </div>
+                      <span className="text-xl font-semibold">여성</span>
+                    </div>
+                  </StepCard>
+                </div>
+              ),
+              mbti: (
+                <div className="max-w-md mx-auto">
+                  <Select value={additionalInfo.mbti} onValueChange={(value) => handleAdditionalInfoChange('mbti', value)}>
+                    <SelectTrigger className="h-14 text-lg rounded-2xl border-2 border-brand-border focus:border-primary-pink">
+                      <SelectValue placeholder="MBTI를 선택하세요" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MBTI_TYPES.map((t) => (
+                        <SelectItem key={t} value={t} className="text-lg py-3">
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ),
+              relationship_stage: (
+                <div className="grid grid-cols-2 gap-4 max-w-2xl mx-auto">
+                  {RELATIONSHIP_STAGES.map((s) => (
+                    <StepCard key={s} isSelected={additionalInfo.relationship_stage === s} onClick={() => handleAdditionalInfoChange('relationship_stage', s)}>
+                      <div className="space-y-2">
+                        <div className="text-2xl mb-2">
+                          {s === "연애 초기" && "💗"}
+                          {s === "연인" && "💕"}
+                          {s === "썸" && "😊"}
+                          {s === "소개팅" && "🤝"}
+                        </div>
+                        <span className="font-semibold text-lg">{s}</span>
+                      </div>
+                    </StepCard>
+                  ))}
+                </div>
+              ),
+              atmosphere: (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-4xl mx-auto">
+                  {ATMOSPHERES.map((a) => (
+                    <StepCard key={a} isSelected={additionalInfo.atmosphere === a} onClick={() => handleAdditionalInfoChange('atmosphere', a)}>
+                      <div className="space-y-2">
+                        <div className="text-2xl mb-2">
+                          {a === "로맨틱" && "💖"}
+                          {a === "트렌디" && "✨"}
+                          {a === "조용한" && "🤫"}
+                          {a === "활기찬" && "🎉"}
+                          {a === "고급스러운" && "👑"}
+                          {a === "감성적" && "🌙"}
+                          {a === "편안한" && "☕"}
+                          {a === "힐링" && "🌿"}
+                        </div>
+                        <span className="font-semibold">{a}</span>
+                      </div>
+                    </StepCard>
+                  ))}
+                </div>
+              ),
+              budget: (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 max-w-3xl mx-auto">
+                    {BUDGETS.map((b) => (
+                      <StepCard key={b} isSelected={additionalInfo.budget === b} onClick={() => handleAdditionalInfoChange('budget', b)}>
+                        <div className="space-y-2">
+                          <div className="text-2xl mb-2">💰</div>
+                          <span className="font-semibold text-lg">{b}</span>
+                        </div>
+                      </StepCard>
+                    ))}
+                  </div>
+                  <p className="text-sm text-gray-500 text-center mt-4">
+                    ⚠️ 현재 예산 기능은 작동하지 않습니다. 추후 업데이트 예정입니다.
+                  </p>
+                </div>
+              ),
+              time_slot: (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-4xl mx-auto">
+                  {TIME_SLOTS.map((t) => (
+                    <StepCard key={t} isSelected={additionalInfo.time_slot === t} onClick={() => handleAdditionalInfoChange('time_slot', t)}>
+                      <div className="space-y-2">
+                        <div className="text-2xl mb-2">
+                          {t === "오전" && "🌅"}
+                          {t === "오후" && "☀️"}
+                          {t === "저녁" && "🌆"}
+                          {t === "밤" && "🌙"}
+                        </div>
+                        <span className="font-semibold">{t}</span>
+                      </div>
+                    </StepCard>
+                  ))}
+                </div>
+              ),
+            }[currentStepId]
+          }
+        </div>
+      </div>
+    );
+  };
+
+  const renderAdditionalInfoForm = () => (
+    <div className="w-full max-w-4xl mx-auto">
+      <div className="text-center mb-12">
+        <h2 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">새로운 데이트 코스 추천받기</h2>
+        <p className="text-lg text-text-secondary">정확한 추천을 위해 몇 가지만 알려주세요</p>
+      </div>
+      <div className="mt-10 space-y-8">
+        {missingFields.includes('age') && (
+          <div className="w-full max-w-md mx-auto space-y-8">
+            <div className="text-center">
+              <p className="text-6xl font-bold text-primary-pink mb-4">{additionalInfo.age}세</p>
+              <p className="text-text-secondary">슬라이더를 움직여 나이를 선택해주세요</p>
+            </div>
+            <div className="px-4">
+              <Slider
+                defaultValue={[additionalInfo.age]}
+                min={18}
+                max={80}
+                step={1}
+                onValueChange={(v) => handleAdditionalInfoChange('age', String(v[0]))}
+                className="[&>*]:bg-primary-pink"
+              />
+              <div className="flex justify-between text-sm text-text-secondary mt-2">
+                <span>18세</span>
+                <span>80세</span>
+              </div>
+            </div>
+          </div>
+        )}
+        {missingFields.includes('gender') && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-lg mx-auto">
+            <StepCard isSelected={additionalInfo.gender === "male"} onClick={() => handleAdditionalInfoChange('gender', 'male')}>
+              <div className="space-y-3">
+                <div className="w-16 h-16 bg-blue-100 rounded-full mx-auto flex items-center justify-center">
+                  <span className="text-2xl">👨</span>
+                </div>
+                <span className="text-xl font-semibold">남성</span>
+              </div>
+            </StepCard>
+            <StepCard isSelected={additionalInfo.gender === "female"} onClick={() => handleAdditionalInfoChange('gender', 'female')}>
+              <div className="space-y-3">
+                <div className="w-16 h-16 bg-secondary-pink rounded-full mx-auto flex items-center justify-center">
+                  <span className="text-2xl">👩</span>
+                </div>
+                <span className="text-xl font-semibold">여성</span>
+              </div>
+            </StepCard>
+          </div>
+        )}
+        {missingFields.includes('mbti') && (
+          <div className="max-w-md mx-auto">
+            <Select value={additionalInfo.mbti} onValueChange={(value) => handleAdditionalInfoChange('mbti', value)}>
+              <SelectTrigger className="h-14 text-lg rounded-2xl border-2 border-brand-border focus:border-primary-pink">
+                <SelectValue placeholder="MBTI를 선택하세요" />
+              </SelectTrigger>
+              <SelectContent>
+                {MBTI_TYPES.map((t) => (
+                  <SelectItem key={t} value={t} className="text-lg py-3">
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-4 max-w-2xl mx-auto">
+          {RELATIONSHIP_STAGES.map((s) => (
+            <StepCard key={s} isSelected={additionalInfo.relationship_stage === s} onClick={() => handleAdditionalInfoChange('relationship_stage', s)}>
+              <div className="space-y-2">
+                <div className="text-2xl mb-2">
+                  {s === "연애 초기" && "💗"}
+                  {s === "연인" && "💕"}
+                  {s === "썸" && "😊"}
+                  {s === "소개팅" && "🤝"}
+                </div>
+                <span className="font-semibold text-lg">{s}</span>
+              </div>
+            </StepCard>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-4xl mx-auto">
+          {ATMOSPHERES.map((a) => (
+            <StepCard key={a} isSelected={additionalInfo.atmosphere === a} onClick={() => handleAdditionalInfoChange('atmosphere', a)}>
+              <div className="space-y-2">
+                <div className="text-2xl mb-2">
+                  {a === "로맨틱" && "💖"}
+                  {a === "트렌디" && "✨"}
+                  {a === "조용한" && "🤫"}
+                  {a === "활기찬" && "🎉"}
+                  {a === "고급스러운" && "👑"}
+                  {a === "감성적" && "🌙"}
+                  {a === "편안한" && "☕"}
+                  {a === "힐링" && "🌿"}
+                </div>
+                <span className="font-semibold">{a}</span>
+              </div>
+            </StepCard>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 max-w-3xl mx-auto">
+          {BUDGETS.map((b) => (
+            <StepCard key={b} isSelected={additionalInfo.budget === b} onClick={() => handleAdditionalInfoChange('budget', b)}>
+              <div className="space-y-2">
+                <div className="text-2xl mb-2">💰</div>
+                <span className="font-semibold text-lg">{b}</span>
+              </div>
+            </StepCard>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-4xl mx-auto">
+          {TIME_SLOTS.map((t) => (
+            <StepCard key={t} isSelected={additionalInfo.time_slot === t} onClick={() => handleAdditionalInfoChange('time_slot', t)}>
+              <div className="space-y-2">
+                <div className="text-2xl mb-2">
+                  {t === "오전" && "🌅"}
+                  {t === "오후" && "☀️"}
+                  {t === "저녁" && "🌆"}
+                  {t === "밤" && "🌙"}
+                </div>
+                <span className="font-semibold">{t}</span>
+              </div>
+            </StepCard>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const ButtonMessage = ({ message, onButtonClick }) => {
+    const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
+    const [isSubmitted, setIsSubmitted] = useState(false);
+
+    if (!message) return null;
+    
+    // 이미 응답이 있는 메시지인지 확인 (다음 메시지가 있으면 이미 제출된 것)
+    const messageIndex = messages.findIndex(m => m.message_content === message);
+    const hasResponse = messageIndex >= 0 && messageIndex < messages.length - 1;
+    const isAlreadySubmitted = isSubmitted || hasResponse;
+    
+    // 기존 버튼 메시지 처리
+    if (message.message_type === 'buttons') {
+      return (
+        <div className="bg-white p-4 rounded-2xl border border-brand-border">
+          <p className="text-text-primary mb-4 font-medium">{message.question}</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {message.buttons?.map((button, index) => (
+              <button
+                key={index}
+                onClick={() => {
+                  if (!isAlreadySubmitted) {
+                    setIsSubmitted(true);
+                    onButtonClick(button.value);
+                  }
+                }}
+                disabled={isAlreadySubmitted}
+                className={`p-3 text-center border border-brand-border rounded-xl transition-all duration-200 text-sm font-medium ${
+                  isAlreadySubmitted 
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed' 
+                    : 'bg-secondary-pink hover:bg-primary-pink hover:text-white'
+                }`}
+              >
+                {button.text}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    
+    // 체크박스 카테고리 선택 UI
+    if (message.message_type === 'category_checkbox') {
+      const handleCategoryToggle = (category: string) => {
+        if (isAlreadySubmitted) return; // 제출 후 수정 불가
+        
+        const newSelected = new Set(selectedCategories);
+        if (newSelected.has(category)) {
+          newSelected.delete(category);
+        } else {
+          newSelected.add(category);
+        }
+        setSelectedCategories(newSelected);
+      };
+
+      // 각 대카테고리에서 최소 1개가 남아있는지 확인
+      const isValidSelection = () => {
+        if (isAlreadySubmitted) return false;
+        
+        for (const [majorCategory, minorCategories] of Object.entries(message.categories)) {
+          const selectedInMajor = minorCategories.filter(cat => selectedCategories.has(cat));
+          const unselectedInMajor = minorCategories.filter(cat => !selectedCategories.has(cat));
+          
+          // 해당 대카테고리에서 선택되지 않은 것이 0개면 (모두 제외하면) 유효하지 않음
+          if (unselectedInMajor.length === 0) {
+            return false;
+          }
+        }
+        return true;
+      };
+
+      const handleConfirm = () => {
+        if (isAlreadySubmitted) return; // 중복 클릭 방지
+        
+        setIsSubmitted(true);
+        const excludedList = Array.from(selectedCategories);
+        if (excludedList.length === 0) {
+          onButtonClick("그대로 진행");
+        } else {
+          onButtonClick(`제외: ${excludedList.join(", ")}`);
+        }
+      };
+
+      return (
+        <div className="bg-white p-6 rounded-2xl border border-brand-border">
+          <div className="mb-4">
+            <h3 className="text-lg font-bold text-text-primary mb-2">{message.title}</h3>
+            <p className="text-text-secondary mb-4">{message.subtitle}</p>
+            <p className="text-sm text-text-secondary">{message.instruction}</p>
+          </div>
+          
+          <div className="space-y-6 mb-6">
+            {Object.entries(message.categories).map(([majorCategory, minorCategories]) => (
+              <div key={majorCategory} className="border border-gray-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-xl">{message.emoji_map[majorCategory] || "📍"}</span>
+                  <h4 className="font-semibold text-text-primary">{majorCategory}</h4>
+                  <span className="text-sm text-text-secondary">({minorCategories.length}개)</span>
+                </div>
+                
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {minorCategories.map((category) => {
+                    const isSelected = selectedCategories.has(category);
+                    
+                    return (
+                      <label
+                        key={category}
+                        className={`flex items-center gap-2 p-3 rounded-lg border transition-all cursor-pointer ${
+                          isSelected 
+                            ? 'bg-red-50 border-red-300 text-red-700' 
+                            : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleCategoryToggle(category)}
+                          disabled={isAlreadySubmitted}
+                          className="w-4 h-4 text-red-600 bg-gray-100 border-gray-300 rounded focus:ring-red-500"
+                        />
+                        <span className="text-sm">{category}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          <div className="flex gap-3">
+            <button
+              onClick={handleConfirm}
+              disabled={isAlreadySubmitted || !isValidSelection()}
+              className={`flex-1 py-3 px-6 rounded-xl font-medium transition-colors ${
+                isAlreadySubmitted 
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                  : !isValidSelection()
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-primary-pink hover:bg-primary-pink/90 text-white'
+              }`}
+            >
+              {isAlreadySubmitted ? '✅ 제출됨' : `✅ 선택 완료 (${selectedCategories.size}개 제외)`}
+            </button>
+            <button
+              onClick={() => {
+                if (!isAlreadySubmitted) {
+                  setIsSubmitted(true);
+                  onButtonClick("그대로 진행");
+                }
+              }}
+              disabled={isAlreadySubmitted || !isValidSelection()}
+              className={`py-3 px-6 rounded-xl font-medium transition-colors ${
+                isAlreadySubmitted 
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed' 
+                  : !isValidSelection()
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+              }`}
+            >
+              ▶️ 그대로 진행
+            </button>
+          </div>
+        </div>
+      );
+    }
+    
+    return null;
+  };
+
+  return (
+    <div className="flex h-screen">
+      {/* 채팅 기록 사이드바 - 채팅 입력창 위까지만 */}
+      {showChatHistory && (
+        <div className="w-80 bg-white border-r border-brand-border flex flex-col z-30" style={{ height: 'calc(100vh - 140px)' }}>
+          <div className="p-4 border-b border-brand-border">
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium text-text-primary">채팅 기록</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowChatHistory(false)}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            {chatSessions.map((session) => (
+              <div
+                key={session.session_id}
+                className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                  session.session_id === currentSessionId
+                    ? 'bg-secondary-pink border border-primary-pink'
+                    : 'bg-gray-50 hover:bg-gray-100 border border-transparent'
+                }`}
+                onClick={() => loadSessionMessages(session.session_id)}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-text-primary mb-1">
+                      {session.session_title || "AI 데이트 코스 추천"}
+                    </div>
+                    <div className="text-xs text-text-secondary truncate mb-2">
+                      {session.preview_message || "채팅을 시작했습니다"}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs text-text-secondary">
+                        {new Date(session.created_at).toLocaleDateString('ko-KR', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </div>
+                      {session.has_course && (
+                        <span className="px-2 py-0.5 bg-primary-pink text-white text-xs rounded-full">
+                          완료
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="ml-2 p-1 h-auto w-auto text-gray-400 hover:text-red-500 hover:bg-red-50"
+                    onClick={(e) => deleteSession(session.session_id, e)}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {chatSessions.length === 0 && (
+              <div className="text-center text-text-secondary text-sm py-8">
+                저장된 채팅 기록이 없습니다.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 메인 컨텐츠 영역 */}
+      <div className="flex-1 flex flex-col">
+        {/* 채팅 단계일 때는 전체 화면 사용 */}
+        {isChatStep ? (
+          <div className="h-screen bg-white">
+            {renderStepContent()}
+          </div>
+        ) : (
+          /* 일반 단계들은 기존 레이아웃 유지 */
+          <div className="bg-gray-50 min-h-screen">
+            <div className="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12">
+              <Card className="bg-white border border-brand-border shadow-xl p-8 sm:p-12 rounded-3xl">
+                <CardContent className="p-0">
+                {/* Progress Bar */}
+                {(isCollectingInfo || (messages.length === 0 && !currentSessionId)) && !showAIChat && (
+                  <div className="flex items-center gap-6 mb-12">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={handleBack}
+                      disabled={currentStepIndex === 0}
+                      className="rounded-full border-2 border-brand-border hover:border-primary-pink bg-transparent"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                    </Button>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-text-secondary">
+                          {currentStepIndex + 1} / {steps.length - 1}
+                        </span>
+                        <span className="text-sm font-medium text-primary-pink">{Math.round(progress)}% 완료</span>
+                      </div>
+                      <Progress value={progress} className="h-3 [&>*]:bg-primary-pink" />
+                    </div>
+                  </div>
+                )}
+
+                {/* 메인 컨텐츠 영역 */}
+                {renderStepContent()}
+
+                {/* 다음 단계 버튼 */}
+                {(isCollectingInfo || (messages.length === 0 && !currentSessionId)) && !showAIChat && (
+                  <div className="mt-16 text-center">
+                    <Button
+                      size="lg"
+                      className="bg-primary-pink hover:bg-primary-pink/90 text-white rounded-full px-12 py-6 text-lg font-bold shadow-lg hover:shadow-xl transition-all duration-300"
+                      onClick={handleNext}
+                      disabled={isLoading || !isCurrentStepValid()}
+                    >
+                      {isLastStep ? (
+                        <>
+                          <Sparkles className="w-5 h-5 mr-2" />
+                          {isLoading ? "결제 처리 중..." : "AI 추천 받기 (1,000 day)"}
+                        </>
+                      ) : (
+                        "다음 단계"
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                {/* 기존 채팅 메시지들 (채팅 모드가 아닐 때) */}
+                {!isCollectingInfo && currentSessionId && !showAIChat && (
+                  <div className="space-y-6 max-w-4xl mx-auto">{/* 기존 채팅 컴포넌트들 */}</div>
+                )}
+
+                {/* 빠른 답변 및 기타 UI 요소들 (채팅 모드일 때만) */}
+                {showAIChat && (
+                  <>
+                    {quickReplies.length > 0 && (
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {quickReplies.map((reply, index) => (
+                          <Button
+                            key={index}
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleQuickReply(reply)}
+                            className="text-sm"
+                          >
+                            {reply}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {canRecommend && currentSessionId && (
+                      <div className="text-center">
+                        <Button
+                          onClick={startRecommendation}
+                          disabled={isLoading}
+                          className="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white px-8 py-3"
+                        >
+                          <Sparkles className="h-5 w-5 mr-2" />
+                          {isLoading ? "추천 생성 중..." : "💕 데이트 코스 추천 받기"}
+                        </Button>
+                      </div>
+                    )}
+                    
+                    <div ref={messagesEndRef} />
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* 코스 상세 보기 모달 */}
+
+      {showCourseModal && selectedCourse && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="relative bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-xl border border-brand-border">
+            {/* 스크롤 가능한 컨텐츠 */}
+            <div className="overflow-y-auto max-h-[90vh] p-6">
+              {/* 헤더 */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary-pink rounded-full flex items-center justify-center">
+                    <Heart className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-text-primary">
+                      코스 상세 정보
+                    </h3>
+                    <p className="text-text-secondary text-sm">데이트 코스 세부 내용</p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowCourseModal(false)}
+                  className="rounded-full"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
 
               {/* 코스 제목 */}
-              <div className="mb-8">
-                <label className="flex items-center gap-2 text-lg font-bold text-gray-800 mb-4">
-                  <div className="w-8 h-8 bg-gradient-to-br from-rose-400 to-pink-500 rounded-full flex items-center justify-center">
-                    <span className="text-white text-sm">📝</span>
-                  </div>
+              <div className="mb-6">
+                <Label className="text-base font-medium text-text-primary mb-2 block">
                   코스 제목
-                </label>
+                </Label>
                 <Input
                   value={editableTitle}
                   onChange={(e) => setEditableTitle(e.target.value)}
                   placeholder="코스 제목을 입력하세요"
-                  className="w-full text-lg font-semibold rounded-xl border-pink-200 focus:border-pink-400 bg-white/80 backdrop-blur-sm py-4"
+                  className="w-full border-brand-border focus:border-primary-pink rounded-xl"
                 />
               </div>
 
               {/* 방문 장소들 */}
               {selectedCourse.places && (
-                <div className="mb-8">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="w-8 h-8 bg-gradient-to-br from-purple-400 to-pink-500 rounded-full flex items-center justify-center">
-                      <MapPin className="w-4 h-4 text-white" />
-                    </div>
-                    <h4 className="text-lg font-bold text-gray-800">방문 장소</h4>
-                    <div className="flex-1 h-px bg-gradient-to-r from-pink-200 to-transparent"></div>
+                <div className="mb-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <MapPin className="w-4 h-4 text-primary-pink" />
+                    <h4 className="text-base font-medium text-text-primary">방문 장소</h4>
                   </div>
                   
-                  <div className="space-y-6">
+                  <div className="space-y-4">
                     {selectedCourse.places.map((place: any, index: number) => (
-                      <div key={index} className="group">
-                        {/* 연결선 (마지막 장소가 아닌 경우) */}
-                        {index < selectedCourse.places.length - 1 && (
-                          <div className="flex justify-center my-4">
-                            <div className="flex flex-col items-center space-y-1">
-                              <div className="w-0.5 h-6 bg-gradient-to-b from-pink-300 to-purple-300 rounded-full"></div>
-                              <ArrowRight className="w-4 h-4 text-pink-400 transform rotate-90" />
-                              <div className="w-0.5 h-6 bg-gradient-to-b from-purple-300 to-pink-300 rounded-full"></div>
-                            </div>
+                      <div key={index} className="bg-white rounded-xl p-5 border border-brand-border shadow-sm">
+                        <div className="flex items-start gap-4">
+                          <div className="w-10 h-10 bg-primary-pink rounded-full flex items-center justify-center text-white font-bold flex-shrink-0">
+                            {index + 1}
                           </div>
-                        )}
-
-                        <div className="bg-white/70 backdrop-blur-lg rounded-2xl border border-pink-200/50 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
-                          <div className={`h-1 bg-gradient-to-r ${
-                            index % 3 === 0 ? 'from-rose-400 to-pink-500' :
-                            index % 3 === 1 ? 'from-purple-400 to-pink-500' :
-                            'from-pink-400 to-rose-500'
-                          }`}></div>
                           
-                          <div className="p-6">
-                            <div className="flex items-start gap-4">
-                              {/* 순서 번호 */}
-                              <div className={`w-12 h-12 bg-gradient-to-br ${
-                                index % 3 === 0 ? 'from-rose-400 to-pink-500' :
-                                index % 3 === 1 ? 'from-purple-400 to-pink-500' :
-                                'from-pink-400 to-rose-500'
-                              } rounded-xl flex items-center justify-center text-white text-lg font-black shadow-lg flex-shrink-0`}>
-                                {index + 1}
+                          <div className="flex-1 space-y-3">
+                            {/* 장소 제목 및 카테고리 */}
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <h5 className="text-lg font-semibold text-text-primary">{place.place_info?.name}</h5>
+                                <span className="px-2 py-1 bg-secondary-pink text-primary-pink text-xs rounded-full font-medium">
+                                  {place.place_info?.category || '장소'}
+                                </span>
                               </div>
-                              
-                              <div className="flex-1 space-y-4">
-                                {/* 장소 정보 */}
-                                <div>
-                                  <div className="flex items-center gap-3 mb-2">
-                                    <h5 className="text-xl font-bold text-gray-900">{place.place_info?.name}</h5>
-                                    <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                                      index % 3 === 0 ? 'bg-gradient-to-r from-rose-100 to-pink-100 text-rose-700' :
-                                      index % 3 === 1 ? 'bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700' :
-                                      'bg-gradient-to-r from-pink-100 to-rose-100 text-pink-700'
-                                    }`}>
-                                      {place.place_info?.category || '특별한 장소'}
-                                    </div>
-                                  </div>
-                                  
-                                  {place.place_info?.address && (
-                                    <div className="flex items-center gap-2 text-gray-600 mb-3">
-                                      <div className="w-6 h-6 bg-gradient-to-br from-pink-100 to-rose-200 rounded-full flex items-center justify-center">
-                                        <MapPin className="w-3 h-3 text-rose-500" />
-                                      </div>
-                                      <span className="text-sm">{place.place_info.address}</span>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* 장소 설명 */}
-                                {place.description && (
-                                  <div className="bg-gradient-to-br from-pink-50 to-rose-50 p-4 rounded-xl border border-pink-100">
-                                    <p className="text-gray-700 leading-relaxed text-sm">{place.description}</p>
-                                  </div>
-                                )}
-
-                                {/* 카카오맵 링크 */}
-                                {place.urls?.kakao_map && (
-                                  <div>
-                                    <a 
-                                      href={place.urls.kakao_map} 
-                                      target="_blank" 
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-2 bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 text-white px-4 py-2 rounded-full font-medium transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
-                                    >
-                                      <MapPin className="w-4 h-4" />
-                                      카카오맵에서 보기
-                                    </a>
-                                  </div>
-                                )}
-                              </div>
+                              {place.place_info?.address && (
+                                <p className="text-text-secondary text-sm">{place.place_info.address}</p>
+                              )}
                             </div>
+
+                            {/* 장소 설명 */}
+                            {place.description && (
+                              <div className="bg-gray-50 p-3 rounded-lg border-l-4 border-primary-pink">
+                                <p className="text-text-primary text-sm leading-relaxed">{place.description}</p>
+                              </div>
+                            )}
+
+                            {/* 지도 버튼 */}
+                            {place.urls?.kakao_map && (
+                              <div>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  asChild
+                                  className="border-primary-pink text-primary-pink hover:bg-primary-pink hover:text-white"
+                                >
+                                  <a href={place.urls.kakao_map} target="_blank" rel="noopener noreferrer">
+                                    <Navigation className="w-3 h-3 mr-2" />
+                                    카카오맵에서 보기
+                                  </a>
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1411,19 +2000,18 @@ export default function CoursePage() {
               </div>
 
               {/* 액션 버튼들 */}
-              <div className="flex flex-col md:flex-row gap-4 pt-6 border-t border-pink-200">
+              <div className="flex gap-3 pt-6 border-t border-brand-border">
                 <Button
                   onClick={saveSingleCourse}
-                  className="flex-1 bg-gradient-to-r from-rose-500 via-pink-500 to-purple-500 hover:from-rose-600 hover:via-pink-600 hover:to-purple-600 text-white py-4 text-lg rounded-full shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105"
+                  className="flex-1 bg-primary-pink hover:bg-primary-pink/90 text-white rounded-xl"
                 >
-                  <Save className="h-5 w-5 mr-3" />
+                  <Save className="h-4 w-4 mr-2" />
                   코스 저장하기
-                  <Heart className="h-4 w-4 ml-3 animate-pulse" />
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => setShowCourseModal(false)}
-                  className="px-8 py-4 border-2 border-pink-200 text-pink-600 hover:bg-pink-50 rounded-full shadow-lg hover:shadow-xl transition-all duration-300"
+                  className="border-brand-border hover:bg-gray-50 rounded-xl"
                 >
                   닫기
                 </Button>
@@ -1432,6 +2020,7 @@ export default function CoursePage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

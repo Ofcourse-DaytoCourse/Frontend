@@ -35,7 +35,7 @@ export const useBalanceData = (autoRefresh = true, intervalSeconds = 30) => {
           id: item.charge_history_id,
           type: 'charge' as const,
           amount: item.amount,
-          description: item.description || '크레딧 충전',
+          description: item.description || 'day 충전',
           created_at: item.created_at,
           status: item.refund_status,
         })),

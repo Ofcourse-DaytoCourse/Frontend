@@ -95,7 +95,7 @@ export default function DepositErrorPage() {
       if (response.success) {
         toast({
           title: "매칭 성공!",
-          description: `${response.charged_amount?.toLocaleString()}원이 잔액에 반영되었습니다.`,
+          description: `${response.charged_amount?.toLocaleString()} day가 반영되었습니다.`,
         });
         
         // 3초 후 대시보드로 이동
@@ -162,7 +162,7 @@ export default function DepositErrorPage() {
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
             <strong>안내:</strong> 입금 후 자동 충전되지 않았다면, 아래 정보를 정확히 입력해주세요. 
-            시스템에서 일치하는 입금을 찾아 자동으로 잔액에 반영됩니다.
+            시스템에서 일치하는 입금을 찾아 자동으로 day에 반영됩니다.
           </AlertDescription>
         </Alert>
 
@@ -205,7 +205,7 @@ export default function DepositErrorPage() {
                 />
               </div>
               <p className="text-xs text-gray-500">
-                실제 입금한 정확한 금액을 입력하세요 (원 단위)
+                실제 입금한 정확한 금액을 입력하세요 (day 단위)
               </p>
             </div>
 
@@ -261,7 +261,7 @@ export default function DepositErrorPage() {
                     <div className="flex items-center justify-between">
                       <span className="text-green-800 font-medium">충전된 금액:</span>
                       <Badge variant="outline" className="text-green-600 border-green-600">
-                        +{matchResult.charged_amount.toLocaleString()}원
+                        +{matchResult.charged_amount.toLocaleString()} day
                       </Badge>
                     </div>
                     <p className="text-sm text-green-600 mt-2">
